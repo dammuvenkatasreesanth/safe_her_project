@@ -1,22 +1,68 @@
 # SafeHer
 
-An AI-enabled women's safety app. This repo currently contains the **complete
-Flutter frontend** — every screen in the app is built and navigable. There is
-**no backend yet**: all data is local/mock, and a few features (maps,
-geocoding) call free public APIs directly from the client. Each of the 9
-feature modules below has a working UI shell ready for its owner to wire up
-real logic, storage, and backend calls.
+**SafeHer** is an AI-enabled women's safety mobile app — one-tap SOS alerts,
+live location sharing, a fake-call escape tool, a safety chatbot, nearby
+police/hospital/NGO lookup, and more. Built with Flutter so a single
+codebase targets Android, iOS, and web.
 
-## Getting started
+This repo currently contains the **complete frontend** — every screen in the
+app is built, styled to the project's Figma design, and fully navigable.
+There is **no backend yet**: data is local/mock for now, and a few features
+(maps, geocoding, nearby-places search) already call free public APIs
+directly from the client. Each of the 9 feature modules below has a working
+UI shell ready for its owner to wire up real logic, storage, and backend
+calls — that's the next phase of this project.
+
+Team: 9 members, one module each (see the ownership table below).
+
+## How to use this repo (for teammates)
+
+### 1. Prerequisites
+
+- Install the Flutter SDK (3.44+, which includes Dart 3.12+): https://docs.flutter.dev/get-started/install
+- Run `flutter doctor` and resolve anything it flags before continuing
+- An editor with Flutter support — VS Code (with the Flutter extension) or Android Studio both work
+- To run on a phone/emulator: Android Studio (for an Android emulator) and/or Xcode on a Mac (for iOS Simulator). To just preview in a browser, none of that is required — see below.
+
+### 2. Get the code running
 
 ```bash
-flutter pub get
-flutter run                       # pick a connected device/emulator
-flutter run -d chrome             # or run in a browser
+git clone <this-repo-url>
+cd safe_her
+flutter pub get      # installs all dependencies
+flutter devices      # see what you can run on
+flutter run          # launches on whatever device/emulator is connected
 ```
 
-Requires Flutter 3.44+ (Dart 3.12+). No API keys are needed for anything
-currently in the app (see "Free services already wired up" below).
+Fastest way to preview with no emulator setup at all:
+
+```bash
+flutter run -d chrome
+```
+
+No API keys, `.env` file, or backend setup are needed to run the app as-is
+— everything it currently talks to (map tiles, geocoding, nearby-places
+search) is a free, keyless public API. See "Free services already wired up"
+below before you add a paid one.
+
+### 3. Find your module
+
+Check the **module ownership map** below for the folder(s) with your name
+on it (by module number), open that screen, and start replacing the mock
+data / adding the real logic. Shared building blocks (buttons, text fields,
+the map widget, colors) already exist — reuse them instead of styling from
+scratch, see "Design system" below.
+
+### 4. Before you commit
+
+```bash
+dart format lib/
+flutter analyze     # must report "No issues found!"
+```
+
+Keep commits scoped to your module where possible, and open a PR against
+`main` rather than pushing straight to it once there's more than one of us
+committing. Mention which module # your PR is for in the description.
 
 ## Project structure
 
@@ -98,3 +144,10 @@ app. Shared building blocks live in `lib/widgets/`:  `PrimaryButton`,
 - Live Tracking route is a straight line, not a real road route
 - Android and iOS location/internet permissions are already declared
   (`android/app/src/main/AndroidManifest.xml`, `ios/Runner/Info.plist`)
+
+## Questions
+
+Ping the team lead (repo owner) if you're blocked on which module owns a
+piece of shared code, or want to change something in `lib/widgets/` or
+`lib/theme/` that other modules depend on — those are shared, so changes
+there affect everyone's screens.
