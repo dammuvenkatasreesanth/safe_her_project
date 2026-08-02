@@ -14,13 +14,19 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   SafeHerTab _tab = SafeHerTab.home;
+  final _trackingKey = GlobalKey<LiveTrackingTabState>();
 
-  static const _tabs = [
-    HomeTab(),
-    LiveTrackingTab(),
-    HistoryTab(),
-    ProfileTab(),
+  late final _tabs = [
+    HomeTab(onShareLocation: _shareLocationFromHome),
+    LiveTrackingTab(key: _trackingKey),
+    const HistoryTab(),
+    const ProfileTab(),
   ];
+
+  void _shareLocationFromHome() {
+    setState(() => _tab = SafeHerTab.tracking);
+    _trackingKey.currentState?.startSharingLocation();
+  }
 
   @override
   Widget build(BuildContext context) {

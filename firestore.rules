@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// TEMPORARY test-mode rules — open for demo/testing since Module 1 (Auth)
+// is still mocked and no real Firebase Auth UIDs exist yet. Replace with
+// the auth-scoped version below before any real user data goes in.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
+
+// Intended real rules, to restore once Module 1 (Auth) is wired up:
+//
+// service cloud.firestore {
+//   match /databases/{database}/documents {
+//     match /live_sessions/{sessionId} {
+//       allow read: if request.auth != null &&
+//         (request.auth.uid == resource.data.ownerId ||
+//          request.auth.uid in resource.data.sharedWithUserIds);
+//
+//       allow create: if request.auth != null &&
+//         request.auth.uid == request.resource.data.ownerId;
+//
+//       allow update: if request.auth != null &&
+//         request.auth.uid == resource.data.ownerId;
+//
+//       allow delete: if false;
+//     }
+//   }
+// }

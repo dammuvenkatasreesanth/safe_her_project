@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
+import '../../services/contacts_service.dart';
+import '../../services/share_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/contact_whatsapp_tile.dart';
+import '../../widgets/primary_button.dart';
 
-Future<void> showShareSheet(BuildContext context) {
+Future<void> showShareSheet(BuildContext context, {LatLng? location}) {
   return showModalBottomSheet(
     context: context,
     backgroundColor: Colors.white,
@@ -9,17 +14,43 @@ Future<void> showShareSheet(BuildContext context) {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.r6)),
     ),
-    builder: (context) => const _ShareSheetContent(),
+    builder: (context) => _ShareSheetContent(location: location),
   );
 }
 
-class _ShareSheetContent extends StatelessWidget {
-  const _ShareSheetContent();
+class _ShareSheetContent extends StatefulWidget {
+  const _ShareSheetContent({required this.location});
+
+  final LatLng? location;
+
+  @override
+  State<_ShareSheetContent> createState() => _ShareSheetContentState();
+}
+
+class _ShareSheetContentState extends State<_ShareSheetContent> {
+  final _noteController = TextEditingController();
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  String get _message => ShareService.buildLocationMessage(
+    widget.location ?? const LatLng(0, 0),
+    note: _noteController.text,
+  );
 
   @override
   Widget build(BuildContext context) {
+    final contacts = ContactsService.contacts;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 15, 26, 23),
+      padding: EdgeInsets.fromLTRB(
+        24,
+        15,
+        26,
+        MediaQuery.of(context).viewInsets.bottom + 23,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -35,177 +66,54 @@ class _ShareSheetContent extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  height: 39,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.neutral200),
-                    borderRadius: BorderRadius.circular(AppRadius.r4),
-                  ),
-                  child: Text(
-                    'Write Message (Optional)',
-                    style: AppTextStyles.b3.copyWith(
-                      color: AppColors.neutral300,
-                    ),
-                  ),
-                ),
+          TextField(
+            controller: _noteController,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'Write Message (Optional)',
+              hintStyle: AppTextStyles.b3.copyWith(color: AppColors.neutral300),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
               ),
-              const SizedBox(width: 9),
-              Container(
-                width: 114,
-                height: 39,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(AppRadius.r4),
-                ),
-                child: Text(
-                  'Share Now',
-                  style: AppTextStyles.b3.copyWith(color: Colors.white),
-                ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.r4),
+                borderSide: const BorderSide(color: AppColors.neutral200),
               ),
-            ],
+            ),
           ),
           const SizedBox(height: 14),
+          PrimaryButton(
+            label: 'Share Now',
+            onPressed: widget.location == null
+                ? null
+                : () {
+                    ShareService.shareViaOtherApps(_message);
+                    Navigator.pop(context);
+                  },
+          ),
+          const SizedBox(height: 18),
           Text(
-            'Send to trusted contact',
+            'Send via WhatsApp',
             style: AppTextStyles.semibold16.copyWith(
               fontSize: 18,
               height: 33 / 18,
             ),
           ),
           const SizedBox(height: 7),
-          Row(
-            children: [
-              for (var i = 0; i < 3; i++) ...[
-                if (i != 0) const SizedBox(width: 14),
-                _ContactAvatar(),
-              ],
-            ],
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'Send in SafeHer',
-            style: AppTextStyles.semibold16.copyWith(
-              fontSize: 18,
-              height: 33 / 18,
-            ),
-          ),
-          const SizedBox(height: 7),
-          SizedBox(
-            height: 56,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: 6,
-              separatorBuilder: (_, _) => const SizedBox(width: 14),
-              itemBuilder: (context, i) => const _PlainAvatar(),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'Share to',
-            style: AppTextStyles.semibold16.copyWith(
-              fontSize: 18,
-              height: 33 / 18,
-            ),
-          ),
-          const SizedBox(height: 7),
-          Row(
-            children: [
-              _ShareIcon(
-                icon: Icons.sms_outlined,
-                color: const Color(0xFF34C759),
-              ),
-              const SizedBox(width: 14),
-              _ShareIcon(
-                icon: Icons.email_outlined,
-                color: const Color(0xFF3478F6),
-              ),
-            ],
-          ),
+          if (widget.location == null)
+            Text('Locating...', style: AppTextStyles.b4)
+          else if (contacts.isEmpty)
+            Text(
+              'No trusted contacts yet. Add them in the Contacts tab.',
+              style: AppTextStyles.b4.copyWith(color: AppColors.neutral400),
+            )
+          else
+            for (final contact in contacts)
+              ContactWhatsAppTile(contact: contact, message: _message),
         ],
       ),
-    );
-  }
-}
-
-class _ContactAvatar extends StatelessWidget {
-  const _ContactAvatar();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 55,
-      height: 55,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Container(
-            width: 55,
-            height: 55,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.primary),
-              image: const DecorationImage(
-                image: AssetImage('assets/images/avatar_shape.png'),
-                fit: BoxFit.cover,
-              ),
-            ),
-          ),
-          Positioned(
-            right: -2,
-            top: 0,
-            child: Container(
-              width: 16,
-              height: 16,
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.check, size: 11, color: Colors.white),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PlainAvatar extends StatelessWidget {
-  const _PlainAvatar();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        image: DecorationImage(
-          image: AssetImage('assets/images/avatar_shape.png'),
-          fit: BoxFit.cover,
-        ),
-      ),
-    );
-  }
-}
-
-class _ShareIcon extends StatelessWidget {
-  const _ShareIcon({required this.icon, required this.color});
-
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 54,
-      height: 54,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      child: Icon(icon, color: Colors.white),
     );
   }
 }

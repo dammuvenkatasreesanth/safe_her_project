@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../models/contact.dart';
+import '../../services/contacts_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_text_field.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/screen_header.dart';
-
-class _Contact {
-  _Contact({required this.name, required this.phone});
-  final String name;
-  final String phone;
-}
 
 class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});
@@ -18,12 +14,6 @@ class ContactsScreen extends StatefulWidget {
 }
 
 class _ContactsScreenState extends State<ContactsScreen> {
-  final _contacts = [
-    _Contact(name: 'Mom', phone: '+91 98765 43210'),
-    _Contact(name: 'Dad', phone: '+91 98765 43211'),
-    _Contact(name: 'Priya (Neighbour)', phone: '+91 98765 43212'),
-  ];
-
   static const _helplines = [
     (label: 'Police', number: '100'),
     (label: "Women's Helpline", number: '1091'),
@@ -78,19 +68,18 @@ class _ContactsScreenState extends State<ContactsScreen> {
       ),
     );
     if (result == true && nameController.text.trim().isNotEmpty) {
-      setState(
-        () => _contacts.add(
-          _Contact(
-            name: nameController.text.trim(),
-            phone: phoneController.text.trim(),
-          ),
-        ),
-      );
+      setState(() {
+        ContactsService.addContact(
+          nameController.text.trim(),
+          phoneController.text.trim(),
+        );
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final contacts = ContactsService.contacts;
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -118,8 +107,8 @@ class _ContactsScreenState extends State<ContactsScreen> {
                         ),
                       ),
                       const SizedBox(height: 14),
-                      for (var i = 0; i < _contacts.length; i++)
-                        _ContactTile(index: i, contact: _contacts[i]),
+                      for (var i = 0; i < contacts.length; i++)
+                        _ContactTile(index: i, contact: contacts[i]),
                       const SizedBox(height: 6),
                       PrimaryButton(
                         label: '+  Add Contact',
@@ -163,7 +152,7 @@ class _ContactTile extends StatelessWidget {
   const _ContactTile({required this.index, required this.contact});
 
   final int index;
-  final _Contact contact;
+  final Contact contact;
 
   @override
   Widget build(BuildContext context) {

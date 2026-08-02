@@ -6,7 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import '../../models/contact.dart';
+import '../../services/contacts_service.dart';
 import '../../services/location_service.dart';
+import '../../services/share_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_map.dart';
 import '../../widgets/primary_button.dart';
@@ -33,7 +36,7 @@ class _SosScreenState extends State<SosScreen> {
   static const _shakeThreshold = 22.0;
   static const _shakeWindow = Duration(milliseconds: 1400);
 
-  static const _contacts = ['Mom', 'Dad', 'Priya (Neighbour)'];
+  static final _contacts = ContactsService.contacts;
 
   @override
   void initState() {
@@ -150,7 +153,7 @@ class _IdleView extends StatefulWidget {
   });
 
   final VoidCallback onTrigger;
-  final List<String> contacts;
+  final List<Contact> contacts;
   final LatLng? location;
   final bool shakeEnabled;
 
@@ -378,7 +381,7 @@ class _IdleViewState extends State<_IdleView> with TickerProviderStateMixin {
             alignment: WrapAlignment.center,
             spacing: 8,
             runSpacing: 8,
-            children: [for (final c in contacts) _ContactChip(name: c)],
+            children: [for (final c in contacts) _ContactChip(name: c.name)],
           ),
         ],
       ),
@@ -524,7 +527,7 @@ class _SentView extends StatefulWidget {
     required this.onCancel,
   });
 
-  final List<String> contacts;
+  final List<Contact> contacts;
   final LatLng? location;
   final VoidCallback onCancel;
 
@@ -647,8 +650,8 @@ class _SentViewState extends State<_SentView>
             ),
           ),
           const SizedBox(height: 10),
-          for (var i = 0; i < widget.contacts.length; i++)
-            _DeliveryTile(name: widget.contacts[i], index: i),
+          for (final contact in widget.contacts)
+            _DeliveryTile(contact: contact, location: widget.location),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -733,24 +736,37 @@ class _RecordingBadgeState extends State<_RecordingBadge>
 }
 
 class _DeliveryTile extends StatefulWidget {
-  const _DeliveryTile({required this.name, required this.index});
+  const _DeliveryTile({required this.contact, required this.location});
 
-  final String name;
-  final int index;
+  final Contact contact;
+  final LatLng? location;
 
   @override
   State<_DeliveryTile> createState() => _DeliveryTileState();
 }
 
 class _DeliveryTileState extends State<_DeliveryTile> {
-  bool _delivered = false;
+  bool _opened = false;
+  bool _sending = false;
 
-  @override
-  void initState() {
-    super.initState();
-    Future.delayed(Duration(milliseconds: 500 + widget.index * 450), () {
-      if (mounted) setState(() => _delivered = true);
+  Future<void> _open() async {
+    if (widget.location == null || _sending) return;
+    setState(() => _sending = true);
+    final message = ShareService.buildLocationMessage(
+      widget.location!,
+      note: 'SOS! I need help.',
+    );
+    final ok = await ShareService.openWhatsApp(widget.contact.phone, message);
+    if (!mounted) return;
+    setState(() {
+      _sending = false;
+      if (ok) _opened = true;
     });
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't open WhatsApp")),
+      );
+    }
   }
 
   @override
@@ -765,17 +781,17 @@ class _DeliveryTileState extends State<_DeliveryTile> {
       ),
       child: Row(
         children: [
-          Text(widget.name, style: AppTextStyles.semibold16),
+          Text(widget.contact.name, style: AppTextStyles.semibold16),
           const Spacer(),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 250),
-            child: _delivered
+            child: _opened
                 ? Row(
-                    key: const ValueKey('delivered'),
+                    key: const ValueKey('opened'),
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Delivered',
+                        'Opened in WhatsApp',
                         style: AppTextStyles.b5.copyWith(
                           color: AppColors.primary,
                         ),
@@ -788,14 +804,21 @@ class _DeliveryTileState extends State<_DeliveryTile> {
                       ),
                     ],
                   )
-                : SizedBox(
-                    key: const ValueKey('sending'),
+                : _sending
+                ? const SizedBox(
+                    key: ValueKey('sending'),
                     width: 14,
                     height: 14,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
                       color: AppColors.neutral400,
                     ),
+                  )
+                : TextButton.icon(
+                    key: const ValueKey('open'),
+                    onPressed: _open,
+                    icon: const Icon(Icons.chat_bubble_rounded, size: 16),
+                    label: const Text('Open in WhatsApp'),
                   ),
           ),
         ],

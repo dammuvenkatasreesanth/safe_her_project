@@ -4,10 +4,16 @@ import '../theme/app_theme.dart';
 /// The "< Title" back-navigation header used on Live Tracking and every
 /// module sub-screen that isn't part of the bottom-nav tab bar.
 class ScreenHeader extends StatelessWidget {
-  const ScreenHeader({super.key, required this.title, this.trailing});
+  const ScreenHeader({
+    super.key,
+    required this.title,
+    this.trailing,
+    this.onBack,
+  });
 
   final String title;
   final Widget? trailing;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -15,7 +21,7 @@ class ScreenHeader extends StatelessWidget {
       children: [
         InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTap: () => Navigator.of(context).maybePop(),
+          onTap: onBack ?? () => Navigator.of(context).maybePop(),
           child: const Padding(
             padding: EdgeInsets.all(4),
             child: Icon(Icons.chevron_left_rounded, size: 26),
