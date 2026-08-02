@@ -2,9 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../../services/geocoding_service.dart';
+import '../../services/routing_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/primary_button.dart';
 import 'pick_location_screen.dart';
+import 'select_route_screen.dart';
 
 class JourneyPlan {
   const JourneyPlan({
@@ -12,11 +14,25 @@ class JourneyPlan {
     required this.from,
     required this.toLabel,
     required this.to,
+    this.vehicleNumber,
+    this.etaMinutes,
+    this.routePoints = const [],
+    this.routeDistanceKm,
+    this.routeDurationMin,
   });
   final String fromLabel;
   final LatLng from;
   final String toLabel;
   final LatLng to;
+  final String? vehicleNumber;
+  final int? etaMinutes;
+
+  /// Real road-route geometry chosen on the route-selection screen, if
+  /// the routing fetch succeeded and the user didn't hit "Continue
+  /// Anyway". Empty means callers should fall back to a direct line.
+  final List<LatLng> routePoints;
+  final double? routeDistanceKm;
+  final int? routeDurationMin;
 }
 
 /// "From / To" destination picker — a journey can't start without knowing
@@ -47,11 +63,16 @@ class _StartJourneySheet extends StatefulWidget {
 
 class _StartJourneySheetState extends State<_StartJourneySheet> {
   final _toController = TextEditingController();
+  final _vehicleController = TextEditingController();
+  final _etaController = TextEditingController();
   String _fromLabel = 'Locating...';
+  LatLng? _customFrom;
   PlaceResult? _selectedDestination;
   List<PlaceResult> _suggestions = [];
   bool _searching = false;
   Timer? _debounce;
+
+  LatLng get _fromPoint => _customFrom ?? widget.currentLocation;
 
   @override
   void initState() {
@@ -66,6 +87,8 @@ class _StartJourneySheetState extends State<_StartJourneySheet> {
   @override
   void dispose() {
     _toController.dispose();
+    _vehicleController.dispose();
+    _etaController.dispose();
     _debounce?.cancel();
     super.dispose();
   }
@@ -102,11 +125,55 @@ class _StartJourneySheetState extends State<_StartJourneySheet> {
   Future<void> _pickOnMap() async {
     final result = await Navigator.of(context).push<PlaceResult>(
       MaterialPageRoute(
-        builder: (_) =>
-            PickLocationScreen(initialCenter: widget.currentLocation),
+        builder: (_) => PickLocationScreen(initialCenter: _fromPoint),
       ),
     );
     if (result != null) _selectSuggestion(result);
+  }
+
+  Future<void> _pickOnMapForFrom() async {
+    final result = await Navigator.of(context).push<PlaceResult>(
+      MaterialPageRoute(
+        builder: (_) => PickLocationScreen(initialCenter: _fromPoint),
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _customFrom = result.point;
+        _fromLabel = result.label;
+      });
+    }
+  }
+
+  Future<void> _startJourney() async {
+    final destination = _selectedDestination;
+    if (destination == null) return;
+
+    final chosenRoute = await Navigator.of(context).push<RouteOption>(
+      MaterialPageRoute(
+        builder: (_) => SelectRouteScreen(
+          from: _fromPoint,
+          to: destination.point,
+          fromLabel: _fromLabel,
+          toLabel: destination.label.split(',').first,
+        ),
+      ),
+    );
+    if (!mounted) return;
+
+    Navigator.of(context).pop(
+      JourneyPlan(
+        fromLabel: _fromLabel,
+        from: _fromPoint,
+        toLabel: destination.label.split(',').first,
+        to: destination.point,
+        vehicleNumber: _vehicleController.text.trim(),
+        etaMinutes: int.tryParse(_etaController.text.trim()),
+        routePoints: chosenRoute?.points ?? const [],
+        routeDistanceKm: chosenRoute?.distanceKm,
+        routeDurationMin: chosenRoute?.durationMin,
+      ),
+    );
   }
 
   @override
@@ -118,143 +185,205 @@ class _StartJourneySheetState extends State<_StartJourneySheet> {
         24,
         MediaQuery.of(context).viewInsets.bottom + 24,
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 57,
-              height: 5,
-              decoration: BoxDecoration(
-                color: AppColors.dot,
-                borderRadius: BorderRadius.circular(9999),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Start a Journey',
-            style: AppTextStyles.h5.copyWith(fontSize: 22),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Add where you\'re headed so we can track your route.',
-            style: AppTextStyles.b3,
-          ),
-          const SizedBox(height: 20),
-          _RoutePointRow(
-            icon: Icons.trip_origin,
-            iconColor: AppColors.primary,
-            label: 'From',
-            child: Text(
-              _fromLabel,
-              style: AppTextStyles.b3,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(left: 9),
-            child: Container(width: 1, height: 20, color: AppColors.neutral300),
-          ),
-          _RoutePointRow(
-            icon: Icons.location_on,
-            iconColor: Colors.black87,
-            label: 'To',
-            child: TextField(
-              controller: _toController,
-              onChanged: _onToChanged,
-              autofocus: true,
-              style: AppTextStyles.b3,
-              decoration: InputDecoration(
-                hintText: 'Search destination...',
-                hintStyle: AppTextStyles.b3.copyWith(
-                  color: AppColors.neutral400,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 57,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: AppColors.dot,
+                  borderRadius: BorderRadius.circular(9999),
                 ),
-                border: InputBorder.none,
-                isDense: true,
-                suffixIcon: _searching
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      )
-                    : null,
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(left: 57, top: 6),
-            child: GestureDetector(
-              onTap: _pickOnMap,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.map_outlined,
-                    size: 15,
-                    color: AppColors.primary,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Pick on map instead',
-                    style: AppTextStyles.b4.copyWith(
+            const SizedBox(height: 16),
+            Text(
+              'Start a Journey',
+              style: AppTextStyles.h5.copyWith(fontSize: 22),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Add where you\'re headed so we can track your route.',
+              style: AppTextStyles.b3,
+            ),
+            const SizedBox(height: 20),
+            _RoutePointRow(
+              icon: Icons.trip_origin,
+              iconColor: AppColors.primary,
+              label: 'From',
+              child: Text(
+                _fromLabel,
+                style: AppTextStyles.b3,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 57, top: 4),
+              child: GestureDetector(
+                onTap: _pickOnMapForFrom,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.map_outlined,
+                      size: 15,
                       color: AppColors.primary,
-                      fontWeight: FontWeight.w600,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 6),
+                    Text(
+                      'Pick on map instead',
+                      style: AppTextStyles.b4.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          if (_suggestions.isNotEmpty)
-            Container(
-              margin: const EdgeInsets.only(top: 8),
-              constraints: const BoxConstraints(maxHeight: 220),
-              decoration: BoxDecoration(
-                border: Border.all(color: AppColors.neutral300),
-                borderRadius: BorderRadius.circular(AppRadius.r4),
-              ),
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: _suggestions.length,
-                separatorBuilder: (_, _) =>
-                    const Divider(height: 1, color: AppColors.neutral200),
-                itemBuilder: (context, i) {
-                  final s = _suggestions[i];
-                  return ListTile(
-                    dense: true,
-                    leading: const Icon(Icons.place_outlined, size: 18),
-                    title: Text(
-                      s.label,
-                      style: AppTextStyles.b4,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onTap: () => _selectSuggestion(s),
-                  );
-                },
+            Padding(
+              padding: const EdgeInsets.only(left: 9, top: 6),
+              child: Container(
+                width: 1,
+                height: 20,
+                color: AppColors.neutral300,
               ),
             ),
-          const SizedBox(height: 24),
-          PrimaryButton(
-            label: 'Start Journey',
-            onPressed: _selectedDestination == null
-                ? null
-                : () => Navigator.of(context).pop(
-                    JourneyPlan(
-                      fromLabel: _fromLabel,
-                      from: widget.currentLocation,
-                      toLabel: _selectedDestination!.label.split(',').first,
-                      to: _selectedDestination!.point,
-                    ),
+            _RoutePointRow(
+              icon: Icons.location_on,
+              iconColor: Colors.black87,
+              label: 'To',
+              child: TextField(
+                controller: _toController,
+                onChanged: _onToChanged,
+                autofocus: true,
+                style: AppTextStyles.b3,
+                decoration: InputDecoration(
+                  hintText: 'Search destination...',
+                  hintStyle: AppTextStyles.b3.copyWith(
+                    color: AppColors.neutral400,
                   ),
-          ),
-        ],
+                  border: InputBorder.none,
+                  isDense: true,
+                  suffixIcon: _searching
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : null,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 57, top: 6),
+              child: GestureDetector(
+                onTap: _pickOnMap,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.map_outlined,
+                      size: 15,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Pick on map instead',
+                      style: AppTextStyles.b4.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_suggestions.isNotEmpty)
+              Container(
+                margin: const EdgeInsets.only(top: 8),
+                constraints: const BoxConstraints(maxHeight: 220),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.neutral300),
+                  borderRadius: BorderRadius.circular(AppRadius.r4),
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: _suggestions.length,
+                  separatorBuilder: (_, _) =>
+                      const Divider(height: 1, color: AppColors.neutral200),
+                  itemBuilder: (context, i) {
+                    final s = _suggestions[i];
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.place_outlined, size: 18),
+                      title: Text(
+                        s.label,
+                        style: AppTextStyles.b4,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      onTap: () => _selectSuggestion(s),
+                    );
+                  },
+                ),
+              ),
+            const SizedBox(height: 20),
+            _RoutePointRow(
+              icon: Icons.directions_car_rounded,
+              iconColor: AppColors.neutral900,
+              label: 'Cab',
+              child: TextField(
+                controller: _vehicleController,
+                style: AppTextStyles.b3,
+                decoration: InputDecoration(
+                  hintText: 'Vehicle No. (Optional)',
+                  hintStyle: AppTextStyles.b3.copyWith(
+                    color: AppColors.neutral400,
+                  ),
+                  border: InputBorder.none,
+                  isDense: true,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 57),
+              child: Container(height: 1, color: AppColors.neutral200),
+            ),
+            const SizedBox(height: 12),
+            _RoutePointRow(
+              icon: Icons.access_time_rounded,
+              iconColor: AppColors.neutral900,
+              label: 'ETA',
+              child: TextField(
+                controller: _etaController,
+                keyboardType: TextInputType.number,
+                style: AppTextStyles.b3,
+                decoration: InputDecoration(
+                  hintText: 'Expected time (Minutes)',
+                  hintStyle: AppTextStyles.b3.copyWith(
+                    color: AppColors.neutral400,
+                  ),
+                  border: InputBorder.none,
+                  isDense: true,
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            PrimaryButton(
+              label: 'Start Journey',
+              onPressed: _selectedDestination == null ? null : _startJourney,
+            ),
+          ],
+        ),
       ),
     );
   }

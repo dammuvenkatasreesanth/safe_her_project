@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import '../../services/geocoding_service.dart';
 import '../../services/location_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/action_card.dart';
@@ -11,11 +14,14 @@ import '../fake_call/fake_call_screen.dart';
 import '../nearby_help/nearby_help_screen.dart';
 import '../report/report_screen.dart';
 import '../safe_route/safe_route_screen.dart';
-import '../share/share_sheet.dart';
 import '../sos/sos_screen.dart';
 
 class HomeTab extends StatefulWidget {
-  const HomeTab({super.key});
+  const HomeTab({super.key, required this.onShareLocation});
+
+  /// Switches to the Tracking tab and starts live location sharing there —
+  /// this button doesn't have its own separate share flow anymore.
+  final VoidCallback onShareLocation;
 
   @override
   State<HomeTab> createState() => _HomeTabState();
@@ -23,13 +29,50 @@ class HomeTab extends StatefulWidget {
 
 class _HomeTabState extends State<HomeTab> {
   LatLng? _location;
+  String? _address;
+  StreamSubscription<Position>? _locationStream;
+  DateTime? _lastGeocodeAt;
 
   @override
   void initState() {
     super.initState();
     LocationService.getCurrentLocation().then((loc) {
       if (mounted) setState(() => _location = loc);
+      _maybeReverseGeocode(loc);
     });
+    _startLocationStream();
+  }
+
+  void _startLocationStream() {
+    _locationStream =
+        Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.best,
+            distanceFilter: 40,
+          ),
+        ).listen((pos) {
+          final loc = LatLng(pos.latitude, pos.longitude);
+          if (mounted) setState(() => _location = loc);
+          _maybeReverseGeocode(loc);
+        });
+  }
+
+  void _maybeReverseGeocode(LatLng loc) {
+    final now = DateTime.now();
+    if (_lastGeocodeAt != null &&
+        now.difference(_lastGeocodeAt!) < const Duration(seconds: 20)) {
+      return;
+    }
+    _lastGeocodeAt = now;
+    GeocodingService.reverse(loc).then((address) {
+      if (mounted && address != null) setState(() => _address = address);
+    });
+  }
+
+  @override
+  void dispose() {
+    _locationStream?.cancel();
+    super.dispose();
   }
 
   @override
@@ -88,14 +131,14 @@ class _HomeTabState extends State<HomeTab> {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'You are in Dhanmondi 32, Dhaka',
+                        _address ?? 'Locating...',
                         style: AppTextStyles.b3,
                       ),
                     ),
                     const SizedBox(height: 10),
                     PrimaryButton(
                       label: 'Share Your Location',
-                      onPressed: () => showShareSheet(context),
+                      onPressed: widget.onShareLocation,
                     ),
                   ],
                 ),
