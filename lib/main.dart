@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
 import 'screens/tracking/tracking_viewer_screen.dart';
+import 'services/contacts_service.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
@@ -12,6 +14,11 @@ void main() async {
 
   // Handle background notifications
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+  // Starts the Module 2 contacts sync early so SOS / Live Tracking / Share
+  // (which read ContactsService.contacts synchronously) see real data as
+  // soon as possible rather than an empty list. Doesn't block first frame.
+  unawaited(ContactsService.init());
 
   runApp(const SafeHerApp());
 }
