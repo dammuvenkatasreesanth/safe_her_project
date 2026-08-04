@@ -1,0 +1,39 @@
+rules_version = '2';
+
+// -----------------------------------------------------------------------
+// Firebase Storage security rules for SafeHer.
+//
+// This file is new to the project — firebase_storage is a dependency
+// added by the Evidence Recording & Storage module (Module 7), and the
+// repo didn't have Storage rules before this. If a storage.rules file
+// already exists by the time this is merged, add only the `match
+// /evidence/{userId}/{fileName}` block below into it rather than
+// overwriting the whole file.
+// -----------------------------------------------------------------------
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Evidence files: evidence/{userId}/{evidenceId}_{fileName}
+    // Only the owning user can read or write their own evidence files —
+    // mirrors the Firestore rule on the `recordings` collection metadata
+    // (see firestore_rules_addition.txt), so metadata and file access
+    // stay in lockstep. Prevents unauthorized downloads (Security
+    // requirement) since Storage download URLs alone don't enforce
+    // access — these rules are what actually do.
+    match /evidence/{userId}/{fileName} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // Extra server-side backstop on the 50MB cap from
+      // EvidenceService.maxFileSizeBytes — belt-and-suspenders in case a
+      // future client skips the app's own validation.
+      allow write: if request.resource.size < 50 * 1024 * 1024;
+    }
+
+    // Deny everything else by default (no implicit access to other
+    // paths/buckets).
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

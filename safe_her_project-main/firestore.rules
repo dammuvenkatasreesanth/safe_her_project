@@ -1,0 +1,87 @@
+rules_version = '2';
+
+// TEMPORARY test-mode rules — open for demo/testing since Module 1 (Auth)
+// is still mocked and no real Firebase Auth UIDs exist yet. Replace with
+// the auth-scoped version below before any real user data goes in.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
+
+// Intended real rules, to restore once Module 1 (Auth) is wired up:
+//
+// service cloud.firestore {
+//   match /databases/{database}/documents {
+//     match /live_sessions/{sessionId} {
+//       allow read: if request.auth != null &&
+//         (request.auth.uid == resource.data.ownerId ||
+//          request.auth.uid in resource.data.sharedWithUserIds);
+//
+//       allow create: if request.auth != null &&
+//         request.auth.uid == request.resource.data.ownerId;
+//
+//       allow update: if request.auth != null &&
+//         request.auth.uid == resource.data.ownerId;
+//
+//       allow delete: if false;
+//     }
+//   }
+// }
+// -----------------------------------------------------------------------
+// ADD this block inside the existing `service cloud.firestore { match
+// /databases/{database}/documents { ... } }` body in firestore.rules,
+// alongside the existing rules for `users`, `contacts`, `incidents`.
+//
+// I don't have the current contents of firestore.rules (couldn't fetch
+// lib subpaths from GitHub in this environment), so please paste it in
+// and I'll merge this properly instead of you copy-pasting blind — but
+// the rule below is self-contained and safe to drop in as-is in the
+// meantime; it doesn't reference anything outside the `recordings`
+// collection.
+// -----------------------------------------------------------------------
+
+match /recordings/{evidenceId} {
+  // Only the owner can read their own evidence — prevents any other
+  // authenticated user from listing or fetching someone else's evidence
+  // (Security requirement: "Users can access only their own evidence").
+  allow read: if request.auth != null
+              && request.auth.uid == resource.data.userId;
+
+  // Creation: must be signed in, and the doc's userId must match the
+  // caller — prevents uploading evidence "as" another user.
+  allow create: if request.auth != null
+                && request.auth.uid == request.resource.data.userId;
+
+  // Update: owner only, AND only while status is NOT 'reported'. This is
+  // the server-side enforcement of "evidence becomes read-only once a
+  // report is submitted" (Requirement #11) — the one exception is the
+  // transition INTO 'reported' itself, which Module 9's report-submission
+  // flow performs via EvidenceService.attachEvidenceToReport().
+  allow update: if request.auth != null
+                && request.auth.uid == resource.data.userId
+                && resource.data.status != 'reported';
+
+  // Delete: owner only, AND only before it's been reported (Requirement
+  // #10). Once locked, not even the owner can delete it client-side.
+  allow delete: if request.auth != null
+                && request.auth.uid == resource.data.userId
+                && resource.data.status != 'reported';
+}
+
+// -----------------------------------------------------------------------
+// Also add to storage.rules (Firebase Storage rules — separate file from
+// firestore.rules; if the project doesn't have one yet, it'll need to be
+// created since firebase_storage is a new dependency for this module):
+// -----------------------------------------------------------------------
+//
+// rules_version = '2';
+// service firebase.storage {
+//   match /b/{bucket}/o {
+//     match /evidence/{userId}/{fileName} {
+//       allow read, write: if request.auth != null && request.auth.uid == userId;
+//     }
+//   }
+// }
