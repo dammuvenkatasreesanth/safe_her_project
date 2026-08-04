@@ -138,7 +138,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         'Alert this contact first when SOS is triggered',
                         style: AppTextStyles.b4,

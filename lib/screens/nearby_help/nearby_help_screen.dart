@@ -245,7 +245,7 @@ class _LocationBanner extends StatelessWidget {
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text('Settings', style: AppTextStyles.b5),
+              child: Text('Settings', style: AppTextStyles.b5),
             ),
         ],
       ),
