@@ -8,6 +8,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import '../../models/contact.dart';
 import '../../services/contacts_service.dart';
+import '../../services/geocoding_service.dart';
+import '../../services/incident_service.dart';
 import '../../services/location_service.dart';
 import '../../services/share_service.dart';
 import '../../theme/app_theme.dart';
@@ -30,19 +32,28 @@ class _SosScreenState extends State<SosScreen> {
   int _count = 3;
   Timer? _timer;
   LatLng? _location;
+  String? _locationLabel;
 
   StreamSubscription<AccelerometerEvent>? _shakeSub;
   DateTime? _lastShakePulse;
   static const _shakeThreshold = 22.0;
   static const _shakeWindow = Duration(milliseconds: 1400);
 
-  static final _contacts = ContactsService.contacts;
+  // Instance-level and re-read on every screen open (not `static final`,
+  // which would freeze this at whatever ContactsService had cached the
+  // very first time this screen was ever built — often an empty list if
+  // opened before Module 2's startup sync finishes).
+  late List<Contact> _contacts = ContactsService.contacts;
 
   @override
   void initState() {
     super.initState();
-    LocationService.getCurrentLocation().then((loc) {
-      if (mounted) setState(() => _location = loc);
+    _contacts = ContactsService.contacts;
+    LocationService.getCurrentLocation().then((loc) async {
+      if (!mounted) return;
+      setState(() => _location = loc);
+      final label = await GeocodingService.reverse(loc);
+      if (mounted) setState(() => _locationLabel = label);
     });
     _listenForShake();
   }
@@ -79,6 +90,14 @@ class _SosScreenState extends State<SosScreen> {
         t.cancel();
         HapticFeedback.heavyImpact();
         setState(() => _state = _SosState.sent);
+        // Fire-and-forget: log to History (Module 9) without blocking the
+        // UI on network — the alert is already visually "sent" from the
+        // user's point of view.
+        IncidentService.submitSos(
+          contactNames: _contacts.map((c) => c.name).toList(),
+          locationLabel: _locationLabel,
+          locationLatLng: _location,
+        ).catchError((_) => '');
       } else {
         HapticFeedback.lightImpact();
         setState(() => _count--);
