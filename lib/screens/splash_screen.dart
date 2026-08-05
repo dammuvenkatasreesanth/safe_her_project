@@ -41,12 +41,17 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted) return;
 
     final user = AuthService.currentUser;
-    if (user == null) {
+    // Module 2 signs every device into an anonymous session at app startup
+    // (see ContactsService.init in main.dart) so contacts work before the
+    // user finishes auth — that's a real `currentUser`, but not a signed-in
+    // one, so it must not skip onboarding/phone-verification for a
+    // brand-new install.
+    if (user == null || user.isAnonymous) {
       Navigator.of(context).pushReplacement(slideRoute(const OnboardingScreen()));
       return;
     }
 
-    // Already signed in from a previous session — skip onboarding/auth entirely.
+    // Already signed in with a verified phone from a previous session — skip onboarding/auth entirely.
     final profile = await UserRepository.getProfile(user.uid);
     if (!mounted) return;
     Navigator.of(context).pushReplacement(

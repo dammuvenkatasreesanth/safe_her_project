@@ -20,6 +20,30 @@ class IncidentService {
   /// upstream rather than something to silently paper over.
   static String get currentUserId => AuthService.currentUser!.uid;
 
+  /// Logs an SOS alert (Module 3) so it shows up in History alongside
+  /// reports — matches the shared `incidents` schema this service already
+  /// owns.
+  static Future<String> submitSos({
+    required List<String> contactNames,
+    String? locationLabel,
+    LatLng? locationLatLng,
+  }) async {
+    final incident = Incident(
+      id: '', // assigned by Firestore
+      reporterId: currentUserId,
+      type: IncidentType.sos,
+      status: IncidentStatus.emergency,
+      title: locationLabel == null ? 'SOS Alert' : 'SOS Alert — $locationLabel',
+      subtitle: contactNames.isEmpty ? 'No contacts to alert yet' : 'Alerted ${contactNames.join(', ')}',
+      createdAt: DateTime.now(),
+      locationLabel: locationLabel,
+      locationLatLng: locationLatLng,
+    );
+
+    final docRef = await _collection.add(incident.toMap());
+    return docRef.id;
+  }
+
   /// Submits a new incident report from the Report screen.
   static Future<String> submitReport({
     required String category,

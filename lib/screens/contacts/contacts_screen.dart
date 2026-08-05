@@ -87,7 +87,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
               setSheetState(() => errorText = result);
               return;
             }
-            if (mounted) Navigator.of(sheetContext).pop();
+            if (sheetContext.mounted) Navigator.of(sheetContext).pop();
           }
 
           return Padding(
