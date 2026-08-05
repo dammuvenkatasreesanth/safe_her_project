@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/incident.dart';
+import 'auth_service.dart';
 
 /// Module 9 — Incident Reporting, Timeline & Admin Dashboard.
 ///
@@ -13,9 +14,11 @@ class IncidentService {
   static final _db = FirebaseFirestore.instance;
   static final _collection = _db.collection('incidents');
 
-  /// TODO(module-1): swap for FirebaseAuth.instance.currentUser!.uid once
-  /// real auth lands. Kept as a single constant so it's a one-line change.
-  static const currentUserId = 'demo_user';
+  /// Module 1 landed — real signed-in UID. Every call site already assumes
+  /// the user is authenticated by the time it runs (Report/History are
+  /// only reachable past the auth gate), so a null here is a genuine bug
+  /// upstream rather than something to silently paper over.
+  static String get currentUserId => AuthService.currentUser!.uid;
 
   /// Submits a new incident report from the Report screen.
   static Future<String> submitReport({

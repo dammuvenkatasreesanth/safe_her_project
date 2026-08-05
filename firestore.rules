@@ -1,14 +1,21 @@
 rules_version = '2';
 
-// Module 1 (Auth) is now wired up with real FirebaseAuth UIDs, so the
-// temporary open test-mode rules are retired. Loosen a specific match
-// block if your module needs broader access — don't reopen the whole
-// database.
+// Module 1 (Auth) landed with real FirebaseAuth UIDs (phone sign-in, with
+// Module 2's anonymous sessions linked onto the same UID rather than
+// orphaned), so the temporary wide-open test-mode rules are retired.
+// Loosen a specific match block if your module needs broader access —
+// don't reopen the whole database.
 service cloud.firestore {
   match /databases/{database}/documents {
 
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      // Module 2 — Contacts. Anonymous or phone-verified, request.auth.uid
+      // is real and stable either way.
+      match /contacts/{contactId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
     }
 
     match /live_sessions/{sessionId} {
@@ -23,6 +30,16 @@ service cloud.firestore {
         request.auth.uid == resource.data.ownerId;
 
       allow delete: if false;
+    }
+
+    // Module 9 — Incident Reporting/History/Admin Dashboard. Reporters can
+    // read/create their own incidents; the web Admin Dashboard reads
+    // across all of them via a service account (bypasses these rules), so
+    // no separate admin allowance is needed here.
+    match /incidents/{incidentId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.reporterId;
+      allow create: if request.auth != null && request.auth.uid == request.resource.data.reporterId;
+      allow update, delete: if false;
     }
 
     // Default-deny anything not explicitly matched above.
