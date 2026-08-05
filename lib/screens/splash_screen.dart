@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../services/auth_service.dart';
+import '../services/user_repository.dart';
 import '../theme/app_theme.dart';
 import '../utils/page_transitions.dart';
+import 'auth/profile_setup_screen.dart';
+import 'home/home_screen.dart';
 import 'onboarding/onboarding_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -30,12 +34,24 @@ class _SplashScreenState extends State<SplashScreen>
   void initState() {
     super.initState();
     _controller.forward();
-    Future.delayed(const Duration(milliseconds: 2000), () {
-      if (!mounted) return;
-      Navigator.of(
-        context,
-      ).pushReplacement(slideRoute(const OnboardingScreen()));
-    });
+    Future.delayed(const Duration(milliseconds: 2000), _routeNext);
+  }
+
+  Future<void> _routeNext() async {
+    if (!mounted) return;
+
+    final user = AuthService.currentUser;
+    if (user == null) {
+      Navigator.of(context).pushReplacement(slideRoute(const OnboardingScreen()));
+      return;
+    }
+
+    // Already signed in from a previous session — skip onboarding/auth entirely.
+    final profile = await UserRepository.getProfile(user.uid);
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      slideRoute(profile?.profileComplete == true ? const HomeScreen() : const ProfileSetupScreen()),
+    );
   }
 
   @override

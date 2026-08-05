@@ -1,21 +1,31 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../services/auth_service.dart';
+import '../../services/user_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/primary_button.dart';
+import '../home/home_screen.dart';
 import 'profile_setup_screen.dart';
 
 class OtpScreen extends StatefulWidget {
-  const OtpScreen({super.key});
+  const OtpScreen({super.key, required this.verificationId, required this.phoneNumber});
+
+  final String verificationId;
+  final String phoneNumber;
 
   @override
   State<OtpScreen> createState() => _OtpScreenState();
 }
 
 class _OtpScreenState extends State<OtpScreen> {
-  final _nodes = List.generate(4, (_) => FocusNode());
-  final _controllers = List.generate(4, (_) => TextEditingController());
+  static const _codeLength = 6;
+  final _nodes = List.generate(_codeLength, (_) => FocusNode());
+  final _controllers = List.generate(_codeLength, (_) => TextEditingController());
+  late String _verificationId = widget.verificationId;
   Timer? _timer;
-  int _secondsLeft = 24;
+  int _secondsLeft = 30;
+  bool _verifying = false;
+  String? _error;
 
   @override
   void initState() {
@@ -24,7 +34,7 @@ class _OtpScreenState extends State<OtpScreen> {
   }
 
   void _startTimer() {
-    _secondsLeft = 24;
+    _secondsLeft = 30;
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (_secondsLeft == 0) {
@@ -33,6 +43,55 @@ class _OtpScreenState extends State<OtpScreen> {
         setState(() => _secondsLeft--);
       }
     });
+  }
+
+  Future<void> _resend() async {
+    if (_secondsLeft != 0) return;
+    _startTimer();
+    await AuthService.sendOtp(
+      phoneNumber: widget.phoneNumber,
+      onCodeSent: (id) {
+        if (mounted) setState(() => _verificationId = id);
+      },
+      onAutoVerified: (credential) => _handleSuccess(credential.user!.uid),
+      onError: (message) {
+        if (mounted) setState(() => _error = message);
+      },
+    );
+  }
+
+  Future<void> _verify() async {
+    final code = _controllers.map((c) => c.text).join();
+    if (code.length < _codeLength) {
+      setState(() => _error = 'Enter the full $_codeLength-digit code.');
+      return;
+    }
+    setState(() {
+      _verifying = true;
+      _error = null;
+    });
+    try {
+      final credential = await AuthService.verifyOtp(verificationId: _verificationId, smsCode: code);
+      await _handleSuccess(credential.user!.uid);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _verifying = false;
+        _error = e is Exception ? e.toString().replaceFirst('Exception: ', '') : 'Verification failed. Try again.';
+      });
+    }
+  }
+
+  Future<void> _handleSuccess(String uid) async {
+    await UserRepository.createIfMissing(uid: uid, phone: widget.phoneNumber);
+    final profile = await UserRepository.getProfile(uid);
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => profile?.profileComplete == true ? const HomeScreen() : const ProfileSetupScreen(),
+      ),
+      (route) => false,
+    );
   }
 
   @override
@@ -60,42 +119,40 @@ class _OtpScreenState extends State<OtpScreen> {
               const SizedBox(height: 44),
               Text('Enter the code', style: AppTextStyles.h5),
               const SizedBox(height: 11),
-              Text('Sent by SMS to +917901289093', style: AppTextStyles.b3),
+              Text('Sent by SMS to ${widget.phoneNumber}', style: AppTextStyles.b3),
               const SizedBox(height: 24),
               Center(
                 child: SizedBox(
-                  width: 245,
+                  width: 320,
                   child: Column(
                     children: [
                       Row(
                         children: [
-                          for (var i = 0; i < 4; i++) ...[
-                            if (i != 0) const SizedBox(width: 10),
+                          for (var i = 0; i < _codeLength; i++) ...[
+                            if (i != 0) const SizedBox(width: 8),
                             Expanded(
                               child: SizedBox(
-                                height: 55,
+                                height: 52,
                                 child: TextField(
                                   controller: _controllers[i],
                                   focusNode: _nodes[i],
                                   textAlign: TextAlign.center,
                                   keyboardType: TextInputType.number,
                                   maxLength: 1,
-                                  style: AppTextStyles.h5.copyWith(
-                                    fontSize: 22,
-                                  ),
+                                  style: AppTextStyles.h5.copyWith(fontSize: 20),
                                   decoration: InputDecoration(
                                     counterText: '',
                                     contentPadding: EdgeInsets.zero,
                                     border: OutlineInputBorder(
                                       borderRadius: BorderRadius.circular(5),
-                                      borderSide: const BorderSide(
-                                        color: AppColors.neutral300,
-                                      ),
+                                      borderSide: const BorderSide(color: AppColors.neutral300),
                                     ),
                                   ),
                                   onChanged: (v) {
-                                    if (v.isNotEmpty && i < 3) {
+                                    if (v.isNotEmpty && i < _codeLength - 1) {
                                       _nodes[i + 1].requestFocus();
+                                    } else if (v.isEmpty && i > 0) {
+                                      _nodes[i - 1].requestFocus();
                                     }
                                   },
                                 ),
@@ -104,6 +161,10 @@ class _OtpScreenState extends State<OtpScreen> {
                           ],
                         ],
                       ),
+                      if (_error != null) ...[
+                        const SizedBox(height: 14),
+                        Text(_error!, style: AppTextStyles.b4.copyWith(color: const Color(0xFFE0334D)), textAlign: TextAlign.center),
+                      ],
                       const SizedBox(height: 14),
                       Text(
                         "Haven't received the code",
@@ -112,7 +173,7 @@ class _OtpScreenState extends State<OtpScreen> {
                       ),
                       const SizedBox(height: 7),
                       GestureDetector(
-                        onTap: _secondsLeft == 0 ? _startTimer : null,
+                        onTap: _secondsLeft == 0 ? _resend : null,
                         child: RichText(
                           text: TextSpan(
                             style: AppTextStyles.b3,
@@ -136,14 +197,8 @@ class _OtpScreenState extends State<OtpScreen> {
               ),
               const Spacer(),
               PrimaryButton(
-                label: 'Verify & Continue',
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const ProfileSetupScreen(),
-                    ),
-                  );
-                },
+                label: _verifying ? 'Verifying...' : 'Verify & Continue',
+                onPressed: _verifying ? null : _verify,
               ),
             ],
           ),

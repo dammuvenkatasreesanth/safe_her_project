@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+import '../../services/auth_service.dart';
+import '../../services/user_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_text_field.dart';
 import '../../widgets/primary_button.dart';
+import '../home/home_screen.dart';
 import 'otp_screen.dart';
+import 'profile_setup_screen.dart';
 
 class PhoneEntryScreen extends StatefulWidget {
   const PhoneEntryScreen({super.key});
@@ -13,11 +17,64 @@ class PhoneEntryScreen extends StatefulWidget {
 
 class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
   final _controller = TextEditingController();
+  bool _sending = false;
+  String? _error;
 
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  String get _e164 => '+91${_controller.text.trim()}';
+
+  Future<void> _sendCode() async {
+    final digits = _controller.text.trim();
+    if (digits.length < 10) {
+      setState(() => _error = 'Enter a valid 10-digit mobile number.');
+      return;
+    }
+    setState(() {
+      _sending = true;
+      _error = null;
+    });
+
+    await AuthService.sendOtp(
+      phoneNumber: _e164,
+      onCodeSent: (verificationId) {
+        if (!mounted) return;
+        setState(() => _sending = false);
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => OtpScreen(verificationId: verificationId, phoneNumber: _e164),
+          ),
+        );
+      },
+      onAutoVerified: (credential) async {
+        // Some Android devices verify the SMS automatically — no code entry needed.
+        await UserRepository.createIfMissing(uid: credential.user!.uid, phone: _e164);
+        if (!mounted) return;
+        _goPostAuth(credential.user!.uid);
+      },
+      onError: (message) {
+        if (!mounted) return;
+        setState(() {
+          _sending = false;
+          _error = message;
+        });
+      },
+    );
+  }
+
+  Future<void> _goPostAuth(String uid) async {
+    final profile = await UserRepository.getProfile(uid);
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => profile?.profileComplete == true ? const HomeScreen() : const ProfileSetupScreen(),
+      ),
+      (route) => false,
+    );
   }
 
   @override
@@ -49,6 +106,10 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
                   style: AppTextStyles.b2.copyWith(color: AppColors.neutral400),
                 ),
               ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(_error!, style: AppTextStyles.b4.copyWith(color: const Color(0xFFE0334D))),
+              ],
               const Spacer(),
               Text(
                 'By continuing, you agree to our Terms and Privacy Policy.',
@@ -56,12 +117,8 @@ class _PhoneEntryScreenState extends State<PhoneEntryScreen> {
               ),
               const SizedBox(height: 13),
               PrimaryButton(
-                label: 'Send Code',
-                onPressed: () {
-                  Navigator.of(
-                    context,
-                  ).push(MaterialPageRoute(builder: (_) => const OtpScreen()));
-                },
+                label: _sending ? 'Sending...' : 'Send Code',
+                onPressed: _sending ? null : _sendCode,
               ),
             ],
           ),

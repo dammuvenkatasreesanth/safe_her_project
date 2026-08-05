@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../models/user_profile.dart';
+import '../../services/auth_service.dart';
+import '../../services/user_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_text_field.dart';
 import '../../widgets/primary_button.dart';
@@ -14,8 +17,34 @@ class ProfileSetupScreen extends StatefulWidget {
 class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _nameController = TextEditingController();
   String? _bloodGroup;
+  bool _saving = false;
 
   static const _bloodGroups = ['A+', 'B+', 'O+', 'AB+'];
+
+  Future<void> _finish({required bool markComplete}) async {
+    final uid = AuthService.currentUser?.uid;
+    if (uid == null) {
+      _goHome();
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final existing = await UserRepository.getProfile(uid);
+      final profile = UserProfile(
+        uid: uid,
+        phone: existing?.phone ?? AuthService.currentUser?.phoneNumber ?? '',
+        fullName: _nameController.text.trim(),
+        bloodGroup: _bloodGroup,
+        profileComplete: markComplete,
+        createdAt: existing?.createdAt,
+      );
+      await UserRepository.saveProfile(profile);
+    } catch (_) {
+      // Non-fatal for the demo flow — still let the user in.
+    }
+    if (!mounted) return;
+    _goHome();
+  }
 
   void _goHome() {
     Navigator.of(context).pushAndRemoveUntil(
@@ -96,11 +125,14 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 child: Text('+  ADD FROM CONTACTS', style: AppTextStyles.b2),
               ),
               const SizedBox(height: 34),
-              PrimaryButton(label: 'Finish Setup', onPressed: _goHome),
+              PrimaryButton(
+                label: _saving ? 'Saving...' : 'Finish Setup',
+                onPressed: _saving ? null : () => _finish(markComplete: true),
+              ),
               const SizedBox(height: 14),
               Center(
                 child: TextButton(
-                  onPressed: _goHome,
+                  onPressed: _saving ? null : () => _finish(markComplete: false),
                   child: Text(
                     "I'll do this later",
                     style: AppTextStyles.b4.copyWith(
