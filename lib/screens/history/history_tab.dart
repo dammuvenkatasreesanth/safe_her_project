@@ -1,35 +1,36 @@
 import 'package:flutter/material.dart';
+import '../../models/incident.dart';
+import '../../services/incident_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_text_field.dart';
 
-enum _Status { emergency, resolved, cancelled }
-
-class _Entry {
-  const _Entry({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.date,
-    required this.status,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final String date;
-  final _Status status;
-
-  Color get color => switch (status) {
-    _Status.emergency => const Color(0xFFE0334D),
-    _Status.resolved => const Color(0xFF16A34A),
-    _Status.cancelled => AppColors.neutral400,
+extension on IncidentStatus {
+  Color get color => switch (this) {
+    IncidentStatus.emergency => const Color(0xFFE0334D),
+    IncidentStatus.resolved => const Color(0xFF16A34A),
+    IncidentStatus.cancelled => AppColors.neutral400,
   };
 
-  String get statusLabel => switch (status) {
-    _Status.emergency => 'Emergency',
-    _Status.resolved => 'Resolved',
-    _Status.cancelled => 'Cancelled',
+  String get label => switch (this) {
+    IncidentStatus.emergency => 'Emergency',
+    IncidentStatus.resolved => 'Resolved',
+    IncidentStatus.cancelled => 'Cancelled',
   };
+}
+
+extension on Incident {
+  IconData get icon => switch (type) {
+    IncidentType.sos => Icons.sos_rounded,
+    IncidentType.report => Icons.description_outlined,
+  };
+
+  String get formattedDate {
+    final d = createdAt;
+    String two(int n) => n.toString().padLeft(2, '0');
+    final hour12 = d.hour % 12 == 0 ? 12 : d.hour % 12;
+    final ampm = d.hour < 12 ? 'AM' : 'PM';
+    return '${two(d.day)}-${two(d.month)}-${d.year} · $hour12:${two(d.minute)} $ampm';
+  }
 }
 
 class HistoryTab extends StatefulWidget {
@@ -45,58 +46,6 @@ class _HistoryTabState extends State<HistoryTab> {
 
   static const _filters = ['All', 'Emergency', 'Resolved', 'Cancelled'];
 
-  static const _entries = [
-    _Entry(
-      icon: Icons.sos_rounded,
-      title: 'SOS Alert — Dhanmondi 32, Dhaka',
-      subtitle: 'Alerted Mom, Dad, Priya (Neighbour)',
-      date: '29-07-2026 · 9:14 PM',
-      status: _Status.emergency,
-    ),
-    _Entry(
-      icon: Icons.alt_route_rounded,
-      title: 'Journey: Dhanmondi to Uttara',
-      subtitle: '11.4 km · Arrived safely',
-      date: '27-07-2026 · 6:02 PM',
-      status: _Status.resolved,
-    ),
-    _Entry(
-      icon: Icons.share_location_outlined,
-      title: 'Location Shared',
-      subtitle: 'With Emergency Help Now',
-      date: '24-07-2026 · 8:40 AM',
-      status: _Status.resolved,
-    ),
-    _Entry(
-      icon: Icons.phone_in_talk_outlined,
-      title: 'Fake Call Triggered',
-      subtitle: 'Caller: Mom',
-      date: '20-07-2026 · 7:55 PM',
-      status: _Status.resolved,
-    ),
-    _Entry(
-      icon: Icons.alt_route_rounded,
-      title: 'Journey: Gulshan to Dhanmondi',
-      subtitle: 'Cancelled before departure',
-      date: '18-07-2026 · 3:12 PM',
-      status: _Status.cancelled,
-    ),
-    _Entry(
-      icon: Icons.description_outlined,
-      title: 'Incident Reported',
-      subtitle: 'Suspicious activity near Road 27',
-      date: '14-07-2026 · 10:20 PM',
-      status: _Status.resolved,
-    ),
-  ];
-
-  int get _emergencyCount =>
-      _entries.where((e) => e.status == _Status.emergency).length;
-  int get _journeyCount =>
-      _entries.where((e) => e.title.startsWith('Journey')).length;
-  int get _resolvedCount =>
-      _entries.where((e) => e.status == _Status.resolved).length;
-
   @override
   void dispose() {
     _searchController.dispose();
@@ -105,9 +54,66 @@ class _HistoryTabState extends State<HistoryTab> {
 
   @override
   Widget build(BuildContext context) {
-    final query = _searchController.text.trim().toLowerCase();
-    final visible = _entries.where((e) {
-      final matchesFilter = _filter == 'All' || e.statusLabel == _filter;
+    return StreamBuilder<List<Incident>>(
+      stream: IncidentService.streamIncidents(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'Could not load your history. Check your connection.',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.b3,
+              ),
+            ),
+          );
+        }
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return _HistoryContent(
+          entries: snapshot.data!,
+          filter: _filter,
+          onFilterChanged: (f) => setState(() => _filter = f),
+          searchController: _searchController,
+          onSearchChanged: () => setState(() {}),
+          filters: _filters,
+        );
+      },
+    );
+  }
+}
+
+class _HistoryContent extends StatelessWidget {
+  const _HistoryContent({
+    required this.entries,
+    required this.filter,
+    required this.onFilterChanged,
+    required this.searchController,
+    required this.onSearchChanged,
+    required this.filters,
+  });
+
+  final List<Incident> entries;
+  final String filter;
+  final ValueChanged<String> onFilterChanged;
+  final TextEditingController searchController;
+  final VoidCallback onSearchChanged;
+  final List<String> filters;
+
+  int get _emergencyCount =>
+      entries.where((e) => e.status == IncidentStatus.emergency).length;
+  int get _journeyCount =>
+      entries.where((e) => e.title.startsWith('Journey')).length;
+  int get _resolvedCount =>
+      entries.where((e) => e.status == IncidentStatus.resolved).length;
+
+  @override
+  Widget build(BuildContext context) {
+    final query = searchController.text.trim().toLowerCase();
+    final visible = entries.where((e) {
+      final matchesFilter = filter == 'All' || e.status.label == filter;
       final matchesQuery =
           query.isEmpty ||
           e.title.toLowerCase().contains(query) ||
@@ -131,14 +137,14 @@ class _HistoryTabState extends State<HistoryTab> {
           Text('Your safety activity timeline', style: AppTextStyles.b3),
           const SizedBox(height: 16),
           AppTextField(
-            controller: _searchController,
+            controller: searchController,
             hint: 'Search your past journeys...',
             prefix: const Icon(
               Icons.search_rounded,
               size: 18,
               color: AppColors.neutral400,
             ),
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) => onSearchChanged(),
           ),
           const SizedBox(height: 16),
           Row(
@@ -171,11 +177,11 @@ class _HistoryTabState extends State<HistoryTab> {
           const SizedBox(height: 16),
           Row(
             children: [
-              for (final f in _filters) ...[
+              for (final f in filters) ...[
                 ChoiceChip(
                   label: Text(f),
-                  selected: _filter == f,
-                  onSelected: (_) => setState(() => _filter = f),
+                  selected: filter == f,
+                  onSelected: (_) => onFilterChanged(f),
                   selectedColor: AppColors.primary.withValues(alpha: 0.12),
                   labelStyle: AppTextStyles.b4,
                   side: const BorderSide(color: AppColors.neutral300),
@@ -190,7 +196,9 @@ class _HistoryTabState extends State<HistoryTab> {
               padding: const EdgeInsets.symmetric(vertical: 40),
               child: Center(
                 child: Text(
-                  'No matching activity yet.',
+                  entries.isEmpty
+                      ? 'No activity yet.'
+                      : 'No matching activity yet.',
                   style: AppTextStyles.b3.copyWith(color: AppColors.neutral400),
                 ),
               ),
@@ -239,10 +247,11 @@ class _SummaryCard extends StatelessWidget {
 class _HistoryCard extends StatelessWidget {
   const _HistoryCard({required this.entry});
 
-  final _Entry entry;
+  final Incident entry;
 
   @override
   Widget build(BuildContext context) {
+    final color = entry.status.color;
     return Container(
       margin: const EdgeInsets.only(bottom: 11),
       decoration: BoxDecoration(
@@ -255,7 +264,7 @@ class _HistoryCard extends StatelessWidget {
             Container(
               width: 4,
               decoration: BoxDecoration(
-                color: entry.color,
+                color: color,
                 borderRadius: const BorderRadius.horizontal(
                   left: Radius.circular(4),
                 ),
@@ -273,11 +282,11 @@ class _HistoryCard extends StatelessWidget {
                       width: 41,
                       height: 41,
                       decoration: BoxDecoration(
-                        color: entry.color.withValues(alpha: 0.1),
+                        color: color.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
                       alignment: Alignment.center,
-                      child: Icon(entry.icon, size: 20, color: entry.color),
+                      child: Icon(entry.icon, size: 20, color: color),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -303,7 +312,7 @@ class _HistoryCard extends StatelessWidget {
                           Row(
                             children: [
                               Text(
-                                entry.date,
+                                entry.formattedDate,
                                 style: AppTextStyles.b5.copyWith(
                                   color: AppColors.neutral400,
                                 ),
@@ -315,13 +324,13 @@ class _HistoryCard extends StatelessWidget {
                                   vertical: 3,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: entry.color.withValues(alpha: 0.1),
+                                  color: color.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
-                                  entry.statusLabel,
+                                  entry.status.label,
                                   style: AppTextStyles.b5.copyWith(
-                                    color: entry.color,
+                                    color: color,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),

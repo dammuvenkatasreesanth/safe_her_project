@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
+import '../../services/geocoding_service.dart';
+import '../../services/incident_service.dart';
+import '../../services/location_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_text_field.dart';
 import '../../widgets/primary_button.dart';
@@ -15,9 +19,60 @@ class _ReportScreenState extends State<ReportScreen> {
   final _descriptionController = TextEditingController();
   String? _type;
   bool _submitted = false;
+  bool _submitting = false;
   bool _photoAttached = false;
+  String? _error;
+
+  LatLng? _location;
+  String _locationLabel = 'Locating...';
+  bool _locating = true;
 
   static const _types = ['Harassment', 'Theft', 'Suspicious Activity', 'Other'];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocation();
+  }
+
+  Future<void> _loadLocation() async {
+    final point = await LocationService.getCurrentLocation();
+    final label = await GeocodingService.reverse(point);
+    if (!mounted) return;
+    setState(() {
+      _location = point;
+      _locationLabel = label ?? 'Dhanmondi 32, Dhaka';
+      _locating = false;
+    });
+  }
+
+  Future<void> _submit() async {
+    if (_type == null || _submitting) return;
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await IncidentService.submitReport(
+        category: _type!,
+        description: _descriptionController.text.trim(),
+        locationLabel: _locationLabel,
+        locationLatLng: _location,
+        hasPhoto: _photoAttached,
+      );
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _submitted = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _error = 'Could not submit report. Check your connection and try again.';
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -93,7 +148,16 @@ class _ReportScreenState extends State<ReportScreen> {
               children: [
                 const Icon(Icons.location_on_outlined, size: 18),
                 const SizedBox(width: 8),
-                Text('Dhanmondi 32, Dhaka', style: AppTextStyles.b3),
+                Expanded(
+                  child: _locating
+                      ? Text('Locating...', style: AppTextStyles.b3)
+                      : Text(
+                          _locationLabel,
+                          style: AppTextStyles.b3,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                ),
               ],
             ),
           ),
@@ -129,12 +193,17 @@ class _ReportScreenState extends State<ReportScreen> {
               ),
             ),
           ),
+          if (_error != null) ...[
+            const SizedBox(height: 16),
+            Text(
+              _error!,
+              style: AppTextStyles.b4.copyWith(color: const Color(0xFFE0334D)),
+            ),
+          ],
           const SizedBox(height: 28),
           PrimaryButton(
-            label: 'Submit Report',
-            onPressed: _type == null
-                ? null
-                : () => setState(() => _submitted = true),
+            label: _submitting ? 'Submitting...' : 'Submit Report',
+            onPressed: (_type == null || _submitting) ? null : _submit,
           ),
         ],
       ),
