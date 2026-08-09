@@ -15,6 +15,7 @@ class AppTextField extends StatelessWidget {
     this.maxLines = 1,
     this.autofocus = false,
     this.onChanged,
+    this.obscureText = false,
   });
 
   final TextEditingController? controller;
@@ -24,6 +25,7 @@ class AppTextField extends StatelessWidget {
   final int maxLines;
   final bool autofocus;
   final ValueChanged<String>? onChanged;
+  final bool obscureText;
 
   static const double height = 56;
 
@@ -60,6 +62,7 @@ class AppTextField extends StatelessWidget {
               maxLines: maxLines,
               autofocus: autofocus,
               onChanged: onChanged,
+              obscureText: obscureText,
               style: AppTextStyles.b2,
               decoration: InputDecoration(
                 hintText: hint,

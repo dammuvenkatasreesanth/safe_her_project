@@ -4,7 +4,7 @@ import '../../utils/page_transitions.dart';
 import '../../widgets/figma_illustration.dart';
 import '../../widgets/onboarding_dots.dart';
 import '../../widgets/primary_button.dart';
-import '../auth/phone_entry_screen.dart';
+import '../auth/signup_screen.dart';
 
 class _OnboardingPageData {
   const _OnboardingPageData({
@@ -62,7 +62,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     } else {
       Navigator.of(
         context,
-      ).pushReplacement(slideRoute(const PhoneEntryScreen()));
+      ).pushReplacement(slideRoute(const SignupScreen()));
     }
   }
 

@@ -1,23 +1,22 @@
 import 'package:firebase_auth/firebase_auth.dart';
 
-/// Real phone-number sign-in (Module 1), merged with Module 2's
-/// forward-compatible anonymous-auth bridge.
+/// Email/password sign-in (Module 1), merged with Module 2's forward-
+/// compatible anonymous-auth bridge.
 ///
-/// Prerequisites in the Firebase Console (Module 1 owner — do this once):
-///  1. Authentication -> Sign-in method -> enable "Phone".
-///  2. Android: register your debug/release SHA-1 + SHA-256 fingerprints
-///     under Project settings -> your Android app, or verification will
-///     silently fall back to a (slower) reCAPTCHA flow.
-///  3. For development without burning real SMS: Authentication -> Sign-in
-///     method -> Phone -> "Phone numbers for testing" — add a fake number
-///     (e.g. +91 99999 99999) with a fixed code (e.g. 123456).
+/// Switched from phone/OTP because Firebase phone auth's Play Integrity
+/// verification path kept failing (CONFIGURATION_NOT_FOUND / cert trust
+/// errors) and Firebase Storage — used elsewhere in the app — now requires
+/// the paid Blaze plan, which isn't an option for this project. Email/
+/// password needs no billing and no SMS quota.
 ///
-/// [verifyOtp]/the auto-verified path link the phone credential onto an
-/// existing anonymous session (from [ensureSignedIn]) instead of minting a
-/// fresh UID, so any data written anonymously before sign-in — e.g.
-/// Module 2 contacts added before the user finished onboarding — carries
-/// over unchanged rather than being orphaned under a UID nobody can reach
-/// again.
+/// Prerequisite in the Firebase Console (Module 1 owner — do this once):
+///  Authentication -> Sign-in method -> enable "Email/Password".
+///
+/// [signUp] links the email credential onto an existing anonymous session
+/// (from [ensureSignedIn]) instead of minting a fresh UID, so any data
+/// written anonymously before sign-up — e.g. Module 2 contacts added
+/// before the user finished onboarding — carries over unchanged rather
+/// than being orphaned under a UID nobody can reach again.
 class AuthService {
   AuthService._();
 
@@ -32,8 +31,8 @@ class AuthService {
 
   /// Returns the current UID, signing in anonymously first if nobody is
   /// signed in yet. Safe to call repeatedly — Firebase caches the session.
-  /// Modules that only need *a* stable UID (not necessarily a
-  /// phone-verified one) should use this rather than assuming
+  /// Modules that only need *a* stable UID (not necessarily an
+  /// email-verified one) should use this rather than assuming
   /// [currentUser] is non-null.
   static Future<String> ensureSignedIn() async {
     final existing = _auth.currentUser;
@@ -53,70 +52,62 @@ class AuthService {
     }
   }
 
-  /// Starts phone verification. [onCodeSent] fires once Firebase has sent
-  /// the SMS — hand its `verificationId` to [verifyOtp] afterwards.
-  /// [onAutoVerified] can fire first on some Android devices that detect
-  /// the SMS automatically, skipping manual code entry entirely.
-  static Future<void> sendOtp({
-    required String phoneNumber,
-    required void Function(String verificationId) onCodeSent,
-    required void Function(String message) onError,
-    required void Function(UserCredential credential) onAutoVerified,
-  }) async {
-    await _auth.verifyPhoneNumber(
-      phoneNumber: phoneNumber,
-      timeout: const Duration(seconds: 60),
-      verificationCompleted: (credential) async {
+  /// Creates a new account. Links onto the current anonymous session if
+  /// there is one, otherwise signs up fresh. Falls back to a plain sign-in
+  /// if the email turns out to already belong to an existing account.
+  static Future<UserCredential> signUp({required String email, required String password}) async {
+    try {
+      final credential = EmailAuthProvider.credential(email: email, password: password);
+      final current = _auth.currentUser;
+      if (current != null && current.isAnonymous) {
         try {
-          onAutoVerified(await _signInOrLink(credential));
+          return await current.linkWithCredential(credential);
         } on FirebaseAuthException catch (e) {
-          onError(_friendlyError(e));
+          if (e.code == 'credential-already-in-use' || e.code == 'email-already-in-use' || e.code == 'provider-already-linked') {
+            return await _auth.signInWithCredential(credential);
+          }
+          rethrow;
         }
-      },
-      verificationFailed: (e) => onError(_friendlyError(e)),
-      codeSent: (verificationId, _) => onCodeSent(verificationId),
-      codeAutoRetrievalTimeout: (_) {},
-    );
-  }
-
-  static Future<UserCredential> verifyOtp({
-    required String verificationId,
-    required String smsCode,
-  }) {
-    final credential = PhoneAuthProvider.credential(verificationId: verificationId, smsCode: smsCode);
-    return _signInOrLink(credential);
-  }
-
-  /// Links onto the current anonymous session if there is one, otherwise
-  /// signs in fresh. Falls back to a plain sign-in if the phone number
-  /// turns out to already belong to a different (real) account.
-  static Future<UserCredential> _signInOrLink(PhoneAuthCredential credential) async {
-    final current = _auth.currentUser;
-    if (current != null && current.isAnonymous) {
-      try {
-        return await current.linkWithCredential(credential);
-      } on FirebaseAuthException catch (e) {
-        if (e.code == 'credential-already-in-use' || e.code == 'provider-already-linked') {
-          return _auth.signInWithCredential(credential);
-        }
-        rethrow;
       }
+      return await _auth.createUserWithEmailAndPassword(email: email, password: password);
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_friendlyError(e));
     }
-    return _auth.signInWithCredential(credential);
+  }
+
+  static Future<UserCredential> signIn({required String email, required String password}) async {
+    try {
+      return await _auth.signInWithEmailAndPassword(email: email, password: password);
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_friendlyError(e));
+    }
+  }
+
+  static Future<void> sendPasswordResetEmail(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_friendlyError(e));
+    }
   }
 
   static Future<void> signOut() => _auth.signOut();
 
   static String _friendlyError(FirebaseAuthException e) {
     switch (e.code) {
-      case 'invalid-phone-number':
-        return 'That phone number looks invalid.';
+      case 'email-already-in-use':
+        return 'An account already exists with that email. Try logging in instead.';
+      case 'invalid-email':
+        return 'That email address looks invalid.';
+      case 'weak-password':
+        return 'Password should be at least 6 characters.';
+      case 'user-not-found':
+      case 'invalid-credential':
+        return 'No account found with that email and password.';
+      case 'wrong-password':
+        return 'Incorrect password. Please try again.';
       case 'too-many-requests':
         return 'Too many attempts. Try again later.';
-      case 'invalid-verification-code':
-        return 'Incorrect code. Please try again.';
-      case 'session-expired':
-        return 'This code expired. Request a new one.';
       default:
         return e.message ?? 'Something went wrong. Please try again.';
     }

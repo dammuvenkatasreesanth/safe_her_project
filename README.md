@@ -95,7 +95,7 @@ vs. what you need to build.
 
 | # | Module | Screens (path under `lib/screens/`) | Status |
 |---|---|---|---|
-| 1 | **Auth & Profile** | `auth/phone_entry_screen.dart`, `auth/otp_screen.dart`, `auth/profile_setup_screen.dart`, `profile/edit_profile_screen.dart`, `profile/profile_tab.dart` | UI done, mock OTP/save. Needs Firebase Auth + Firestore user doc. |
+| 1 | **Auth & Profile** | `auth/signup_screen.dart`, `auth/login_screen.dart`, `auth/profile_setup_screen.dart`, `profile/edit_profile_screen.dart`, `profile/profile_tab.dart` | Real Firebase Auth (email/password) + Firestore `users/{uid}` doc. `profile/edit_profile_screen.dart` and `profile/profile_tab.dart` still show mock/hardcoded data — not wired to the real signed-in profile yet. |
 | 2 | **Contacts & Nearby Services** | `contacts/contacts_screen.dart`, `nearby_help/nearby_help_screen.dart` | UI done. Contacts are in-memory (no persistence yet). Nearby Help already calls the free Overpass API for real police/hospital/NGO pins, with a static fallback list. |
 | 3 | **SOS Trigger & Alerts** | `sos/sos_screen.dart` | UI + shake-to-trigger (`sensors_plus`) + hold-to-arm gesture done. SMS/call/push on trigger are **not wired** — `_startCountdown`/sent state is where to hook those in. |
 | 4 | **Live GPS Tracking** | `tracking/live_tracking_tab.dart`, `tracking/start_journey_sheet.dart`, `tracking/pick_location_screen.dart` | UI done with **real GPS** (`geolocator`) and **real destination search/pin** (`Nominatim`). Route is a straight line — swap in OSRM for real routing. Geofence toggle is UI-only. |

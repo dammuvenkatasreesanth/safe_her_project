@@ -1,8 +1,9 @@
 rules_version = '2';
 
-// Module 1 (Auth) landed with real FirebaseAuth UIDs (phone sign-in, with
-// Module 2's anonymous sessions linked onto the same UID rather than
-// orphaned), so the temporary wide-open test-mode rules are retired.
+// Module 1 (Auth) landed with real FirebaseAuth UIDs (email/password
+// sign-in, with Module 2's anonymous sessions linked onto the same UID
+// rather than orphaned), so the temporary wide-open test-mode rules are
+// retired.
 // Loosen a specific match block if your module needs broader access —
 // don't reopen the whole database.
 service cloud.firestore {
@@ -11,7 +12,7 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
 
-      // Module 2 — Contacts. Anonymous or phone-verified, request.auth.uid
+      // Module 2 — Contacts. Anonymous or email-verified, request.auth.uid
       // is real and stable either way.
       match /contacts/{contactId} {
         allow read, write: if request.auth != null && request.auth.uid == uid;

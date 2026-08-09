@@ -32,7 +32,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       final existing = await UserRepository.getProfile(uid);
       final profile = UserProfile(
         uid: uid,
-        phone: existing?.phone ?? AuthService.currentUser?.phoneNumber ?? '',
+        email: existing?.email ?? AuthService.currentUser?.email ?? '',
         fullName: _nameController.text.trim(),
         bloodGroup: _bloodGroup,
         profileComplete: markComplete,

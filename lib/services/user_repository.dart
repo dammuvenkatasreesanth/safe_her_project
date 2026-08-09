@@ -8,11 +8,11 @@ class UserRepository {
 
   static final CollectionReference<Map<String, dynamic>> _users = FirebaseFirestore.instance.collection('users');
 
-  static Future<void> createIfMissing({required String uid, required String phone}) async {
+  static Future<void> createIfMissing({required String uid, required String email}) async {
     final doc = _users.doc(uid);
     final snapshot = await doc.get();
     if (!snapshot.exists) {
-      await doc.set(UserProfile(uid: uid, phone: phone, createdAt: DateTime.now()).toMap());
+      await doc.set(UserProfile(uid: uid, email: email, createdAt: DateTime.now()).toMap());
     }
   }
 

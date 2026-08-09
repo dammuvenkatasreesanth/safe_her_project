@@ -7,7 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class UserProfile {
   const UserProfile({
     required this.uid,
-    required this.phone,
+    required this.email,
     this.fullName = '',
     this.bloodGroup,
     this.medicalNotes,
@@ -17,7 +17,7 @@ class UserProfile {
   });
 
   final String uid;
-  final String phone;
+  final String email;
   final String fullName;
   final String? bloodGroup;
   final String? medicalNotes;
@@ -34,7 +34,7 @@ class UserProfile {
   }) {
     return UserProfile(
       uid: uid,
-      phone: phone,
+      email: email,
       fullName: fullName ?? this.fullName,
       bloodGroup: bloodGroup ?? this.bloodGroup,
       medicalNotes: medicalNotes ?? this.medicalNotes,
@@ -47,7 +47,7 @@ class UserProfile {
   Map<String, dynamic> toMap() {
     return {
       'uid': uid,
-      'phone': phone,
+      'email': email,
       'fullName': fullName,
       'bloodGroup': bloodGroup,
       'medicalNotes': medicalNotes,
@@ -61,7 +61,7 @@ class UserProfile {
     final createdAtRaw = map['createdAt'];
     return UserProfile(
       uid: map['uid'] as String,
-      phone: map['phone'] as String? ?? '',
+      email: map['email'] as String? ?? '',
       fullName: map['fullName'] as String? ?? '',
       bloodGroup: map['bloodGroup'] as String?,
       medicalNotes: map['medicalNotes'] as String?,
