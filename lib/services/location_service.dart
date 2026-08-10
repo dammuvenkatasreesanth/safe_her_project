@@ -11,7 +11,7 @@ class LocationService {
   static Future<LatLng> getCurrentLocation() async {
     try {
       return await _resolve().timeout(
-        const Duration(seconds: 20),
+        const Duration(seconds: 15),
         onTimeout: () => defaultLocation,
       );
     } catch (_) {
@@ -35,9 +35,20 @@ class LocationService {
     try {
       // A recent cached fix (if any) returns instantly and is usually accurate
       // enough — avoids waiting on a cold GPS fix every time the app opens.
+      //
+      // BUT: on Chrome specifically, this can return a position that's
+      // stale in a confusing way — if you've been testing with DevTools'
+      // Sensors panel, the browser can keep handing back the position you
+      // set several minutes ago even after you change it again, and even
+      // across a full page refresh, because the cache lives at the
+      // browser/OS level, not the page level. For a safety app, "confidently
+      // wrong" is worse than "a couple seconds slower," so this shortcut
+      // now only trusts a fix from the last 30 seconds instead of 5
+      // minutes — tight enough to stop masking a changed position, loose
+      // enough to still skip a redundant fresh GPS request most of the time.
       final last = await Geolocator.getLastKnownPosition();
       if (last != null &&
-          DateTime.now().difference(last.timestamp).inMinutes < 5) {
+          DateTime.now().difference(last.timestamp).inSeconds < 30) {
         return LatLng(last.latitude, last.longitude);
       }
     } catch (_) {
