@@ -57,7 +57,8 @@ class _SafeRouteScreenState extends State<SafeRouteScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error = "Couldn't score risk zones right now. Check your connection and try again.";
+        _error =
+            "Couldn't score risk zones right now. Check your connection and try again.";
         _loading = false;
       });
     }
@@ -99,12 +100,19 @@ class _SafeRouteScreenState extends State<SafeRouteScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.location_off_rounded, size: 18, color: Color(0xFFB45309)),
+                      const Icon(
+                        Icons.location_off_rounded,
+                        size: 18,
+                        color: Color(0xFFB45309),
+                      ),
                       const SizedBox(width: 8),
                       const Expanded(
                         child: Text(
                           "Couldn't get your real location — showing a fallback area.",
-                          style: TextStyle(fontSize: 12, color: Color(0xFF92400E)),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF92400E),
+                          ),
                         ),
                       ),
                       TextButton(onPressed: _load, child: const Text('Retry')),
@@ -126,9 +134,11 @@ class _SafeRouteScreenState extends State<SafeRouteScreen> {
                         ),
                       ),
                       const SizedBox(height: 14),
-                      if (assessment != null) _SummaryCard(assessment: assessment),
+                      if (assessment != null)
+                        _SummaryCard(assessment: assessment),
                       const SizedBox(height: 14),
-                      if (assessment != null && assessment.zones.isNotEmpty) ...[
+                      if (assessment != null &&
+                          assessment.zones.isNotEmpty) ...[
                         Text('Nearby zones', style: AppTextStyles.semibold16),
                         const SizedBox(height: 8),
                         ...assessment.zones
@@ -156,7 +166,10 @@ class _SafeRouteScreenState extends State<SafeRouteScreen> {
           children: [
             const CircularProgressIndicator(color: AppColors.primary),
             const SizedBox(height: 12),
-            Text(_loadingMessage, style: AppTextStyles.b4.copyWith(color: AppColors.neutral400)),
+            Text(
+              _loadingMessage,
+              style: AppTextStyles.b4.copyWith(color: AppColors.neutral400),
+            ),
           ],
         ),
       );
@@ -231,7 +244,11 @@ class _SummaryCard extends StatelessWidget {
               shape: BoxShape.circle,
             ),
             alignment: Alignment.center,
-            child: Icon(Icons.route_rounded, size: 18, color: _colorForLevel(level)),
+            child: Icon(
+              Icons.route_rounded,
+              size: 18,
+              color: _colorForLevel(level),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -330,16 +347,26 @@ class _HowThisWorksCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.info_outline_rounded, size: 16, color: AppColors.neutral400),
+              const Icon(
+                Icons.info_outline_rounded,
+                size: 16,
+                color: AppColors.neutral400,
+              ),
               const SizedBox(width: 6),
-              Text('How this is scored', style: AppTextStyles.b4.copyWith(fontWeight: FontWeight.w600)),
+              Text(
+                'How this is scored',
+                style: AppTextStyles.b4.copyWith(fontWeight: FontWeight.w600),
+              ),
             ],
           ),
           const SizedBox(height: 8),
           for (final p in points)
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
-              child: Text('•  $p', style: AppTextStyles.b5.copyWith(color: AppColors.neutral400)),
+              child: Text(
+                '•  $p',
+                style: AppTextStyles.b5.copyWith(color: AppColors.neutral400),
+              ),
             ),
           if (assessment != null) ...[
             const SizedBox(height: 4),
@@ -373,7 +400,11 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.signal_wifi_off_rounded, size: 40, color: AppColors.neutral400),
+            const Icon(
+              Icons.signal_wifi_off_rounded,
+              size: 40,
+              color: AppColors.neutral400,
+            ),
             const SizedBox(height: 12),
             Text(message, style: AppTextStyles.b4, textAlign: TextAlign.center),
             const SizedBox(height: 12),

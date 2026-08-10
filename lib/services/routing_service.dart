@@ -18,7 +18,8 @@ class RouteOption {
     this.riskLevel,
   });
 
-  final String label; // 'Fastest Route', 'Alternate Route 1', 'Walking (approx.)', ...
+  final String
+  label; // 'Fastest Route', 'Alternate Route 1', 'Walking (approx.)', ...
   final List<LatLng> points;
   final double distanceKm;
   final int durationMin;
@@ -127,10 +128,10 @@ class RoutingService {
 
       final parsed = <RouteOption>[];
       for (final route in routes) {
-        final coords =
-            (route['geometry']['coordinates'] as List).cast<List>();
+        final coords = (route['geometry']['coordinates'] as List).cast<List>();
         final points = [
-          for (final c in coords) LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()),
+          for (final c in coords)
+            LatLng((c[1] as num).toDouble(), (c[0] as num).toDouble()),
         ];
         parsed.add(
           RouteOption(
@@ -181,7 +182,11 @@ class RoutingService {
   /// Linearly interpolated points between [from] and [to] — subdivided
   /// purely so the line renders consistently with real routes on the map
   /// (matching stroke behavior), not because it's curved or path-aware.
-  static List<LatLng> _straightLine(LatLng from, LatLng to, {required int segments}) {
+  static List<LatLng> _straightLine(
+    LatLng from,
+    LatLng to, {
+    required int segments,
+  }) {
     return [
       for (var i = 0; i <= segments; i++)
         LatLng(

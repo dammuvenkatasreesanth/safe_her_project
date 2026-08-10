@@ -38,8 +38,8 @@ class _SafeHerAppState extends State<SafeHerApp> {
   }
 
   Future<void> _setupInteractedMessage() async {
-    RemoteMessage? initialMessage =
-        await FirebaseMessaging.instance.getInitialMessage();
+    RemoteMessage? initialMessage = await FirebaseMessaging.instance
+        .getInitialMessage();
 
     if (initialMessage != null) {
       _handleMessage(initialMessage);
@@ -52,9 +52,8 @@ class _SafeHerAppState extends State<SafeHerApp> {
     if (message.data['sessionId'] != null) {
       _navigatorKey.currentState?.push(
         MaterialPageRoute(
-          builder: (context) => TrackingViewerScreen(
-            sessionId: message.data['sessionId'],
-          ),
+          builder: (context) =>
+              TrackingViewerScreen(sessionId: message.data['sessionId']),
         ),
       );
     }

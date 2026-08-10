@@ -334,7 +334,8 @@ class _StartJourneySheetState extends State<_StartJourneySheet> {
             else if (_searchedWithNoResults && _selectedDestination == null)
               const _SearchHint(
                 icon: Icons.search_off_rounded,
-                text: 'No matches found. Try a different search, or pick on map above.',
+                text:
+                    'No matches found. Try a different search, or pick on map above.',
               ),
             if (_suggestions.isNotEmpty)
               Container(

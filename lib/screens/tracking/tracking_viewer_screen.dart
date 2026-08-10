@@ -88,9 +88,15 @@ class _LiveTrackingView extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           decoration: const BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.r6)),
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(AppRadius.r6),
+            ),
             boxShadow: [
-              BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2)),
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 10,
+                offset: Offset(0, -2),
+              ),
             ],
           ),
           child: Column(
@@ -103,7 +109,10 @@ class _LiveTrackingView extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Heading to', style: AppTextStyles.b5),
-                      Text(session.destinationLabel, style: AppTextStyles.semibold16),
+                      Text(
+                        session.destinationLabel,
+                        style: AppTextStyles.semibold16,
+                      ),
                     ],
                   ),
                   if (session.etaMinutes != null)
@@ -114,11 +123,17 @@ class _LiveTrackingView extends StatelessWidget {
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    const Icon(Icons.pause_circle_outline, size: 16, color: AppColors.neutral400),
+                    const Icon(
+                      Icons.pause_circle_outline,
+                      size: 16,
+                      color: AppColors.neutral400,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       'Still on her way — live location sharing is paused',
-                      style: AppTextStyles.b5.copyWith(color: AppColors.neutral400),
+                      style: AppTextStyles.b5.copyWith(
+                        color: AppColors.neutral400,
+                      ),
                     ),
                   ],
                 ),
@@ -127,11 +142,17 @@ class _LiveTrackingView extends StatelessWidget {
               if (session.vehicleNumber != null)
                 Row(
                   children: [
-                    const Icon(Icons.directions_car, size: 16, color: AppColors.neutral400),
+                    const Icon(
+                      Icons.directions_car,
+                      size: 16,
+                      color: AppColors.neutral400,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'Vehicle: ${session.vehicleNumber}',
-                      style: AppTextStyles.b3.copyWith(color: AppColors.neutral900),
+                      style: AppTextStyles.b3.copyWith(
+                        color: AppColors.neutral900,
+                      ),
                     ),
                   ],
                 ),
@@ -162,7 +183,10 @@ class _TripEndedView extends StatelessWidget {
               color: Colors.green,
             ),
             const SizedBox(height: 24),
-            Text(arrived ? 'Reached Destination' : 'Trip Ended', style: AppTextStyles.h5),
+            Text(
+              arrived ? 'Reached Destination' : 'Trip Ended',
+              style: AppTextStyles.h5,
+            ),
             const SizedBox(height: 8),
             Text(
               arrived
@@ -189,9 +213,7 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Text('Error loading session: $error'),
-    );
+    return Center(child: Text('Error loading session: $error'));
   }
 }
 

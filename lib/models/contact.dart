@@ -9,6 +9,7 @@ class Contact {
   final String id;
   final String name;
   final String phone;
+
   /// If the contact is a SafeHer user, their real Firebase UID
   final String? userId;
 

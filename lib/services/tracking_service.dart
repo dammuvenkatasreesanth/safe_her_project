@@ -70,7 +70,10 @@ class TrackingService {
     });
   }
 
-  static Future<void> shareWithUsers(String sessionId, List<String> userIds) async {
+  static Future<void> shareWithUsers(
+    String sessionId,
+    List<String> userIds,
+  ) async {
     await _db.collection('live_sessions').doc(sessionId).update({
       'sharedWithUserIds': FieldValue.arrayUnion(userIds),
     });

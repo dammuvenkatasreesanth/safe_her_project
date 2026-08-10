@@ -102,9 +102,10 @@ class RiskService {
     final overpassFuture = _fetchOverpassFeatures(
       center,
     ).then<_OverpassFeatures?>((f) => f).catchError((_) => null);
-    final incidentsFuture = _fetchRecentIncidents(center, now)
-        .then<List<_Incident>?>((list) => list)
-        .catchError((_) => null);
+    final incidentsFuture = _fetchRecentIncidents(
+      center,
+      now,
+    ).then<List<_Incident>?>((list) => list).catchError((_) => null);
 
     final results = await Future.wait([overpassFuture, incidentsFuture]);
     final features = results[0] as _OverpassFeatures?;
@@ -141,7 +142,7 @@ class RiskService {
       final reasons = <String>[
         if (incidentHits.isNotEmpty)
           '${incidentHits.length} nearby community report'
-          '${incidentHits.length == 1 ? '' : 's'}',
+              '${incidentHits.length == 1 ? '' : 's'}',
         if (lampCount == 0 && isNight) 'No street lighting detected nearby',
         if (activityCount == 0) 'Few nearby venues (low foot traffic)',
       ];
@@ -162,8 +163,11 @@ class RiskService {
         ? 100.0
         : zones.map((z) => z.score).reduce((a, b) => a + b) / zones.length;
 
-    final sortedByScore = [...zones]..sort((a, b) => a.score.compareTo(b.score));
-    final notable = sortedByScore.where((z) => z.level != RiskLevel.safe).toList();
+    final sortedByScore = [...zones]
+      ..sort((a, b) => a.score.compareTo(b.score));
+    final notable = sortedByScore
+        .where((z) => z.level != RiskLevel.safe)
+        .toList();
     final safestForContext = sortedByScore.reversed
         .where((z) => !notable.contains(z))
         .take(2);
@@ -210,12 +214,17 @@ class RiskService {
     const earthRadius = 6371000.0;
     final dLat = (dNorthMeters / earthRadius) * (180 / math.pi);
     final dLng =
-        (dEastMeters / (earthRadius * math.cos(origin.latitude * math.pi / 180))) *
+        (dEastMeters /
+            (earthRadius * math.cos(origin.latitude * math.pi / 180))) *
         (180 / math.pi);
     return LatLng(origin.latitude + dLat, origin.longitude + dLng);
   }
 
-  static int _countWithin(List<LatLng> points, LatLng center, double radiusMeters) {
+  static int _countWithin(
+    List<LatLng> points,
+    LatLng center,
+    double radiusMeters,
+  ) {
     var count = 0;
     for (final p in points) {
       if (LocationService.distanceKm(center, p) * 1000 <= radiusMeters) count++;
@@ -230,7 +239,9 @@ class RiskService {
   ) {
     return incidents
         .where(
-          (i) => LocationService.distanceKm(center, i.location) * 1000 <= radiusMeters,
+          (i) =>
+              LocationService.distanceKm(center, i.location) * 1000 <=
+              radiusMeters,
         )
         .toList();
   }
@@ -353,7 +364,10 @@ class RiskService {
           (data['createdAt'] as Timestamp?)?.toDate();
       if (reportedAt == null || reportedAt.isBefore(cutoff)) continue;
       incidents.add(
-        _Incident(location: LatLng(geo.latitude, geo.longitude), reportedAt: reportedAt),
+        _Incident(
+          location: LatLng(geo.latitude, geo.longitude),
+          reportedAt: reportedAt,
+        ),
       );
     }
     return incidents;

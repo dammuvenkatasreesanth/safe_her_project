@@ -40,7 +40,8 @@ class RouteSafetyEvaluation {
   final double distanceInRiskyAreasKm;
   final int nearbyEmergencyFacilities;
 
-  int get totalRiskZonesCrossed => highRiskZonesCrossed + moderateRiskZonesCrossed;
+  int get totalRiskZonesCrossed =>
+      highRiskZonesCrossed + moderateRiskZonesCrossed;
 }
 
 class RouteRecommendation {
@@ -173,7 +174,8 @@ class RouteSafetyService {
         final insideRisky = assessment.zones.any(
           (z) =>
               z.level != RiskLevel.safe &&
-              LocationService.distanceKm(point, z.center) * 1000 <= z.radiusMeters,
+              LocationService.distanceKm(point, z.center) * 1000 <=
+                  z.radiusMeters,
         );
         if (insideRisky) riskyDistanceKm += segmentKm;
       }
@@ -182,7 +184,9 @@ class RouteSafetyService {
     final nearbyFacilities = facilities
         .where(
           (f) => sampled.any(
-            (p) => LocationService.distanceKm(p, f) * 1000 <= _facilityBufferMeters,
+            (p) =>
+                LocationService.distanceKm(p, f) * 1000 <=
+                _facilityBufferMeters,
           ),
         )
         .length;
@@ -222,9 +226,11 @@ class RouteSafetyService {
     }
 
     final reasons = <String>[];
-    final zonesAvoided = fastest.totalRiskZonesCrossed - safest.totalRiskZonesCrossed;
+    final zonesAvoided =
+        fastest.totalRiskZonesCrossed - safest.totalRiskZonesCrossed;
     if (zonesAvoided > 0) {
-      final highAvoided = fastest.highRiskZonesCrossed - safest.highRiskZonesCrossed;
+      final highAvoided =
+          fastest.highRiskZonesCrossed - safest.highRiskZonesCrossed;
       if (highAvoided > 0) {
         reasons.add(
           'avoids $highAvoided high-risk zone${highAvoided == 1 ? '' : 's'}',
@@ -257,16 +263,15 @@ class RouteSafetyService {
     final all = routes.expand((r) => r.points).toList();
     if (all.isEmpty) return const LatLng(0, 0);
     final lat = all.map((p) => p.latitude).reduce((a, b) => a + b) / all.length;
-    final lng = all.map((p) => p.longitude).reduce((a, b) => a + b) / all.length;
+    final lng =
+        all.map((p) => p.longitude).reduce((a, b) => a + b) / all.length;
     return LatLng(lat, lng);
   }
 
   static List<LatLng> _sample(List<LatLng> points, int maxSamples) {
     if (points.length <= maxSamples) return points;
     final step = points.length / maxSamples;
-    return [
-      for (var i = 0.0; i < points.length; i += step) points[i.floor()],
-    ];
+    return [for (var i = 0.0; i < points.length; i += step) points[i.floor()]];
   }
 
   static Future<List<LatLng>> _fetchEmergencyFacilities(LatLng center) async {

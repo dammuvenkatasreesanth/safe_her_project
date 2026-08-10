@@ -57,7 +57,10 @@ class _SelectRouteScreenState extends State<SelectRouteScreen> {
   Future<void> _fetch() async {
     final routes = _mode == TravelMode.driving
         ? await RoutingService.getRoutes(from: widget.from, to: widget.to)
-        : await RoutingService.getWalkingRoute(from: widget.from, to: widget.to);
+        : await RoutingService.getWalkingRoute(
+            from: widget.from,
+            to: widget.to,
+          );
 
     // Milestone 3/4: score every route with the full safety algorithm
     // (risk zones crossed, distance inside them, nearby emergency
@@ -86,7 +89,9 @@ class _SelectRouteScreenState extends State<SelectRouteScreen> {
           // forward — it's a comparison against the fastest route, so it
           // wouldn't make sense attached to every option.
           rec.safest.route.safetyExplanation = rec.explanation;
-          initialIndex = routes.indexWhere((r) => identical(r, rec.safest.route));
+          initialIndex = routes.indexWhere(
+            (r) => identical(r, rec.safest.route),
+          );
           if (initialIndex < 0) initialIndex = 0;
         } else {
           scoringFailed = true;
@@ -289,7 +294,11 @@ class _RoutesView extends StatelessWidget {
                 MarkerLayer(
                   markers: [
                     youAreHereMarker(from, size: 32),
-                    placeMarker(to, icon: Icons.flag_rounded, color: Colors.black87),
+                    placeMarker(
+                      to,
+                      icon: Icons.flag_rounded,
+                      color: Colors.black87,
+                    ),
                   ],
                 ),
               ],
@@ -392,7 +401,11 @@ class _ModeChip extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 16, color: selected ? Colors.white : AppColors.neutral400),
+            Icon(
+              icon,
+              size: 16,
+              color: selected ? Colors.white : AppColors.neutral400,
+            ),
             const SizedBox(width: 6),
             Text(
               label,
@@ -422,7 +435,11 @@ class _ScoringFailedBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.signal_wifi_statusbar_connected_no_internet_4_rounded, size: 16, color: AppColors.neutral400),
+          const Icon(
+            Icons.signal_wifi_statusbar_connected_no_internet_4_rounded,
+            size: 16,
+            color: AppColors.neutral400,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -447,12 +464,18 @@ class _ApproximateRouteBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFF59E0B).withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(AppRadius.r4),
-        border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.25)),
+        border: Border.all(
+          color: const Color(0xFFF59E0B).withValues(alpha: 0.25),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFFF59E0B)),
+          const Icon(
+            Icons.info_outline_rounded,
+            size: 16,
+            color: Color(0xFFF59E0B),
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -480,12 +503,18 @@ class _ExplanationBanner extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF16A34A).withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(AppRadius.r4),
-        border: Border.all(color: const Color(0xFF16A34A).withValues(alpha: 0.25)),
+        border: Border.all(
+          color: const Color(0xFF16A34A).withValues(alpha: 0.25),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF16A34A)),
+          const Icon(
+            Icons.info_outline_rounded,
+            size: 16,
+            color: Color(0xFF16A34A),
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(text, style: AppTextStyles.b5.copyWith(height: 1.4)),
@@ -516,7 +545,10 @@ class _SafetyScorePill extends StatelessWidget {
       ),
       child: Text(
         'Safety ${score.round()}',
-        style: AppTextStyles.b5.copyWith(color: color, fontWeight: FontWeight.w600),
+        style: AppTextStyles.b5.copyWith(
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -541,7 +573,10 @@ class _RiskBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: AppTextStyles.b5.copyWith(color: color, fontWeight: FontWeight.w600),
+        style: AppTextStyles.b5.copyWith(
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -596,7 +631,8 @@ class _RouteCard extends StatelessWidget {
                         const SizedBox(width: 8),
                         _SafetyScorePill(score: eval.safetyScore),
                       ],
-                      if (route.riskLevel != null && route.riskLevel != RiskLevel.safe) ...[
+                      if (route.riskLevel != null &&
+                          route.riskLevel != RiskLevel.safe) ...[
                         const SizedBox(width: 8),
                         _RiskBadge(level: route.riskLevel!),
                       ],

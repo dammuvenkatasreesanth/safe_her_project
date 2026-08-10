@@ -180,7 +180,9 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
   void _checkArrival(LatLng loc) {
     final journey = _journey;
     if (journey == null) return;
-    final radiusMeters = _geofenceEnabled ? _geofenceRadius : _defaultArrivalRadiusMeters;
+    final radiusMeters = _geofenceEnabled
+        ? _geofenceRadius
+        : _defaultArrivalRadiusMeters;
     final distanceMeters = LocationService.distanceKm(loc, journey.to) * 1000;
     if (distanceMeters <= radiusMeters) {
       _arrivalHandled = true;
@@ -271,9 +273,9 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
       _startLocationStreaming();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Couldn't start sharing: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Couldn't start sharing: $e")));
     }
   }
 
@@ -712,7 +714,9 @@ Future<List<_JourneyFacility>> _fetchJourneyFacilities(LatLng center) async {
     result.add(
       _JourneyFacility(
         point: LatLng(lat, lon),
-        icon: isPolice ? Icons.local_police_rounded : Icons.local_hospital_rounded,
+        icon: isPolice
+            ? Icons.local_police_rounded
+            : Icons.local_hospital_rounded,
         color: isPolice ? const Color(0xFF2563EB) : const Color(0xFFE0334D),
       ),
     );
@@ -842,10 +846,11 @@ class _JourneyState extends StatelessWidget {
                                   point: z.center,
                                   radius: z.radiusMeters,
                                   useRadiusInMeter: true,
-                                  color: (z.level == RiskLevel.high
-                                          ? const Color(0xFFE0334D)
-                                          : const Color(0xFFF59E0B))
-                                      .withValues(alpha: 0.16),
+                                  color:
+                                      (z.level == RiskLevel.high
+                                              ? const Color(0xFFE0334D)
+                                              : const Color(0xFFF59E0B))
+                                          .withValues(alpha: 0.16),
                                   borderColor: z.level == RiskLevel.high
                                       ? const Color(0xFFE0334D)
                                       : const Color(0xFFF59E0B),
@@ -902,7 +907,9 @@ class _JourneyState extends StatelessWidget {
               ],
               const SizedBox(height: 10),
               PrimaryButton(
-                label: sharingLive ? 'Stop Sharing Live Location' : 'Resume Sharing Live Location',
+                label: sharingLive
+                    ? 'Stop Sharing Live Location'
+                    : 'Resume Sharing Live Location',
                 outlined: true,
                 onPressed: onToggleSharing,
               ),
@@ -975,10 +982,17 @@ class _JourneyState extends StatelessWidget {
         // LiveTrackingTabState._checkArrival / _handleArrival).
         TextButton.icon(
           onPressed: onEndJourney,
-          icon: const Icon(Icons.flag_circle_outlined, size: 18, color: Color(0xFFB3261E)),
+          icon: const Icon(
+            Icons.flag_circle_outlined,
+            size: 18,
+            color: Color(0xFFB3261E),
+          ),
           label: const Text(
             'End Journey',
-            style: TextStyle(color: Color(0xFFB3261E), fontWeight: FontWeight.w600),
+            style: TextStyle(
+              color: Color(0xFFB3261E),
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ],
@@ -1006,7 +1020,11 @@ class _LocationRetryBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.location_off_rounded, size: 18, color: Color(0xFFB45309)),
+          const Icon(
+            Icons.location_off_rounded,
+            size: 18,
+            color: Color(0xFFB45309),
+          ),
           const SizedBox(width: 8),
           const Expanded(
             child: Text(
