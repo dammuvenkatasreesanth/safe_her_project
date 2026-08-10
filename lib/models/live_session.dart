@@ -14,6 +14,8 @@ class LiveSession {
     this.etaMinutes,
     this.lastLocation,
     this.sharedWithUserIds = const [],
+    this.arrivedSafely = false,
+    this.sharingPaused = false,
   });
 
   final String id;
@@ -27,6 +29,19 @@ class LiveSession {
   final int? etaMinutes;
   final SessionLocation? lastLocation;
   final List<String> sharedWithUserIds;
+
+  /// True only when the session was ended by SafeHer's own arrival
+  /// detection (see LiveTrackingTabState._handleArrival) — distinct from
+  /// a plain manual "Stop Sharing," so a contact watching the trip can
+  /// tell "she made it" from "she stopped sharing" at a glance.
+  final bool arrivedSafely;
+
+  /// True while the traveler has toggled off live-location sharing
+  /// mid-journey without ending it — see
+  /// LiveTrackingTabState._toggleSharing. The viewer screen uses this to
+  /// tell a contact "still on her way, just not sharing live position
+  /// right now" instead of implying the last-known point is current.
+  final bool sharingPaused;
 
   Map<String, dynamic> toMap() {
     return {
@@ -43,6 +58,8 @@ class LiveSession {
       'etaMinutes': etaMinutes,
       if (lastLocation != null) 'lastLocation': lastLocation!.toMap(),
       'sharedWithUserIds': sharedWithUserIds,
+      'arrivedSafely': arrivedSafely,
+      'sharingPaused': sharingPaused,
     };
   }
 
@@ -67,6 +84,8 @@ class LiveSession {
       etaMinutes: data['etaMinutes'],
       lastLocation: last != null ? SessionLocation.fromMap(last) : null,
       sharedWithUserIds: List<String>.from(data['sharedWithUserIds'] ?? []),
+      arrivedSafely: data['arrivedSafely'] ?? false,
+      sharingPaused: data['sharingPaused'] ?? false,
     );
   }
 }

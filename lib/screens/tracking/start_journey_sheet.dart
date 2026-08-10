@@ -19,6 +19,8 @@ class JourneyPlan {
     this.routePoints = const [],
     this.routeDistanceKm,
     this.routeDurationMin,
+    this.routeSafetyScore,
+    this.routeExplanation,
   });
   final String fromLabel;
   final LatLng from;
@@ -33,6 +35,15 @@ class JourneyPlan {
   final List<LatLng> routePoints;
   final double? routeDistanceKm;
   final int? routeDurationMin;
+
+  /// 0-100 weighted safety score for the chosen route, and — only when
+  /// the chosen route was the recommended-safest one — the plain-English
+  /// reason it was recommended. Both null if scoring wasn't attempted or
+  /// failed; routeExplanation is also null if the user picked a route
+  /// other than the recommended safest one, since the sentence is a
+  /// comparison against the fastest route and wouldn't apply.
+  final double? routeSafetyScore;
+  final String? routeExplanation;
 }
 
 /// "From / To" destination picker — a journey can't start without knowing
@@ -70,6 +81,7 @@ class _StartJourneySheetState extends State<_StartJourneySheet> {
   PlaceResult? _selectedDestination;
   List<PlaceResult> _suggestions = [];
   bool _searching = false;
+  bool _searchedWithNoResults = false;
   Timer? _debounce;
 
   LatLng get _fromPoint => _customFrom ?? widget.currentLocation;
@@ -94,7 +106,10 @@ class _StartJourneySheetState extends State<_StartJourneySheet> {
   }
 
   void _onToChanged(String value) {
-    setState(() => _selectedDestination = null);
+    setState(() {
+      _selectedDestination = null;
+      _searchedWithNoResults = false;
+    });
     _debounce?.cancel();
     if (value.trim().length < 3) {
       setState(() => _suggestions = []);
@@ -110,6 +125,7 @@ class _StartJourneySheetState extends State<_StartJourneySheet> {
       setState(() {
         _suggestions = results;
         _searching = false;
+        _searchedWithNoResults = results.isEmpty;
       });
     });
   }
@@ -172,6 +188,8 @@ class _StartJourneySheetState extends State<_StartJourneySheet> {
         routePoints: chosenRoute?.points ?? const [],
         routeDistanceKm: chosenRoute?.distanceKm,
         routeDurationMin: chosenRoute?.durationMin,
+        routeSafetyScore: chosenRoute?.safetyScore,
+        routeExplanation: chosenRoute?.safetyExplanation,
       ),
     );
   }
@@ -307,6 +325,18 @@ class _StartJourneySheetState extends State<_StartJourneySheet> {
                 ),
               ),
             ),
+            if (_toController.text.trim().isNotEmpty &&
+                _toController.text.trim().length < 3)
+              const _SearchHint(
+                icon: Icons.info_outline_rounded,
+                text: 'Keep typing — at least 3 characters to search',
+              )
+            else if (_searchedWithNoResults && _selectedDestination == null)
+              const _SearchHint(
+                icon: Icons.search_off_rounded,
+                text:
+                    'No matches found. Try a different search, or pick on map above.',
+              ),
             if (_suggestions.isNotEmpty)
               Container(
                 margin: const EdgeInsets.only(top: 8),
@@ -418,6 +448,36 @@ class _RoutePointRow extends StatelessWidget {
         ),
         Expanded(child: child),
       ],
+    );
+  }
+}
+
+/// Small inline hint shown under the destination search field — either
+/// "keep typing" (query too short to search yet) or "no matches found"
+/// (search completed with zero results). Kept as one widget so both
+/// states share the same subdued styling.
+class _SearchHint extends StatelessWidget {
+  const _SearchHint({required this.text, required this.icon});
+
+  final String text;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 57, top: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: AppColors.neutral400),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              text,
+              style: AppTextStyles.b5.copyWith(color: AppColors.neutral400),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

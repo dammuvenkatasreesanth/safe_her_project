@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
 import '../../models/contact.dart';
 import '../../services/location_service.dart';
+import '../../services/risk_service.dart';
 import '../../services/share_service.dart';
 import '../../services/tracking_service.dart';
 import '../../services/contacts_service.dart';
@@ -33,12 +36,38 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
   String? _sessionId;
   List<String> _sharedWithUserIds = [];
   StreamSubscription? _locationStream;
+  RiskAssessment? _journeySafety;
+  List<_JourneyFacility> _journeyFacilities = [];
+  bool _locationUnavailable = false;
+  bool _loadingLocation = true;
+  double _traveledKm = 0;
+  bool _arrivalHandled = false;
+  bool _sharingLive = true;
+
+  /// How close counts as "arrived" when the geofence toggle is off. When
+  /// it's on, [_geofenceRadius] is used instead so the two stay
+  /// consistent with what's drawn on the map.
+  static const double _defaultArrivalRadiusMeters = 100;
 
   @override
   void initState() {
     super.initState();
-    LocationService.getCurrentLocation().then((loc) {
-      if (mounted) setState(() => _location = loc);
+    _loadLocation();
+  }
+
+  Future<void> _loadLocation() async {
+    setState(() => _loadingLocation = true);
+    final loc = await LocationService.getCurrentLocation();
+    if (!mounted) return;
+    setState(() {
+      _location = loc;
+      // defaultLocation is only ever returned when a real fix couldn't be
+      // obtained (permission, timeout, no GPS) — see location_service.dart.
+      // Comparing against it is how we tell "this is really where you are"
+      // from "this is the Dhaka fallback" so the UI can say so instead of
+      // silently showing a fallback as if it were real.
+      _locationUnavailable = loc == defaultLocation;
+      _loadingLocation = false;
     });
   }
 
@@ -52,24 +81,39 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
     if (_location == null) return;
     final plan = await showStartJourneySheet(context, _location!);
     if (plan != null && mounted) {
-      final sid = await TrackingService.startSession(
-        ownerId: 'user_123', // TODO: Pull from Auth
-        ownerName: 'Ananya Sharma', // TODO: Pull from Auth
-        destinationLabel: plan.toLabel,
-        destinationLatLng: plan.to,
-        vehicleNumber: plan.vehicleNumber,
-        etaMinutes: plan.etaMinutes,
-      );
-      final registeredIds = await _shareWithRegisteredContacts(sid);
+      try {
+        final sid = await TrackingService.startSession(
+          ownerId: 'user_123', // TODO: Pull from Auth
+          ownerName: 'Ananya Sharma', // TODO: Pull from Auth
+          destinationLabel: plan.toLabel,
+          destinationLatLng: plan.to,
+          vehicleNumber: plan.vehicleNumber,
+          etaMinutes: plan.etaMinutes,
+        );
+        final registeredIds = await _shareWithRegisteredContacts(sid);
 
-      setState(() {
-        _journey = plan;
-        _sessionId = sid;
-        _sharedWithUserIds = registeredIds;
-        _mode = _TrackingMode.onJourney;
-      });
+        if (!mounted) return;
+        setState(() {
+          _journey = plan;
+          _sessionId = sid;
+          _sharedWithUserIds = registeredIds;
+          _mode = _TrackingMode.onJourney;
+          _traveledKm = 0;
+          _arrivalHandled = false;
+          _sharingLive = true;
+        });
 
-      _startLocationStreaming();
+        _startLocationStreaming();
+        _loadJourneySafetyContext(plan);
+      } catch (e) {
+        // Without this, a failed Firestore write (e.g. rules not deployed,
+        // or offline) used to fail silently — the sheet would close and
+        // the screen would just sit back at idle with no explanation.
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Couldn't start the journey: $e")),
+        );
+      }
     }
   }
 
@@ -93,7 +137,12 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
         Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.best,
-            distanceFilter: 50, // Update every 50 meters
+            // Small on purpose (was 50m): with a 50m filter, testing via
+            // Chrome DevTools' Sensors panel — where you type in nearby
+            // coordinates rather than actually walking — mostly got
+            // filtered out entirely, so distance/arrival never updated.
+            // 10m is still sane for real GPS, just far more testable.
+            distanceFilter: 10,
           ),
         ).listen((pos) {
           final loc = LatLng(pos.latitude, pos.longitude);
@@ -102,16 +151,96 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
           final speed = pos.speed.isFinite && pos.speed > 0
               ? pos.speed * 3.6
               : 0.0;
+          final previous = _location;
           if (mounted) {
             setState(() {
+              if (_journey != null && previous != null) {
+                _traveledKm += LocationService.distanceKm(previous, loc);
+              }
               _location = loc;
               _speedKmh = speed;
             });
           }
-          if (_sessionId != null) {
+          if (_sessionId != null && _sharingLive) {
             TrackingService.updateLocation(_sessionId!, loc);
           }
+          if (_journey != null && !_arrivalHandled) {
+            // Arrival detection runs off the device's own GPS regardless
+            // of whether live sharing is paused — "stop sharing" only
+            // controls what contacts see, not whether the app itself
+            // still knows you've reached your destination.
+            _checkArrival(loc);
+          }
         });
+  }
+
+  /// Compares live location against the destination and, the first time
+  /// it's within the arrival radius, hands off to [_handleArrival]. Guards
+  /// on [_arrivalHandled] so this can only ever fire once per journey.
+  void _checkArrival(LatLng loc) {
+    final journey = _journey;
+    if (journey == null) return;
+    final radiusMeters = _geofenceEnabled
+        ? _geofenceRadius
+        : _defaultArrivalRadiusMeters;
+    final distanceMeters = LocationService.distanceKm(loc, journey.to) * 1000;
+    if (distanceMeters <= radiusMeters) {
+      _arrivalHandled = true;
+      _handleArrival(journey);
+    }
+  }
+
+  /// Fires once, automatically, the moment the traveler's live location
+  /// enters the arrival radius around the destination:
+  ///  - flags the Firestore session as arrived + ends it, which anyone
+  ///    with the tracking viewer open sees immediately, in real time, with
+  ///    no action needed on their end (see tracking_viewer_screen.dart)
+  ///  - tells the traveler themselves, in-app, that this happened
+  ///
+  /// Honest limitation: SafeHer has no SMS/push backend (see
+  /// share_service.dart) — contacts who *aren't* actively watching the
+  /// live tracking viewer only find out via WhatsApp, which still needs a
+  /// tap to actually send. That's why this also opens a pre-filled
+  /// "I've arrived" share sheet rather than claiming it silently messaged
+  /// everyone.
+  Future<void> _handleArrival(JourneyPlan journey) async {
+    final sid = _sessionId;
+    _locationStream?.cancel();
+    try {
+      if (sid != null) {
+        await TrackingService.endSessionOnArrival(sid);
+      }
+    } catch (_) {
+      // Even if this write fails, still tell the traveler locally and
+      // still offer the manual share — don't let a Firestore hiccup hide
+      // the fact that they've arrived.
+    }
+    if (!mounted) return;
+    setState(() {
+      _mode = _TrackingMode.idle;
+      _journey = null;
+      _sessionId = null;
+      _sharedWithUserIds = [];
+      _journeySafety = null;
+      _journeyFacilities = [];
+      _traveledKm = 0;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          "You've arrived at ${journey.toLabel}. Contacts watching your "
+          'trip saw this instantly — want to also notify others by '
+          'WhatsApp?',
+        ),
+        action: SnackBarAction(
+          label: 'Notify',
+          onPressed: () => ShareService.shareViaOtherApps(
+            "I've arrived safely at ${journey.toLabel}. — sent via SafeHer",
+          ),
+        ),
+        duration: const Duration(seconds: 8),
+      ),
+    );
   }
 
   /// Starts sharing the current location, same as tapping "Share Your
@@ -125,21 +254,68 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
 
   Future<void> _shareOnly() async {
     if (_location == null) return;
-    final sid = await TrackingService.startSession(
-      ownerId: 'user_123', // TODO: Pull from Auth
-      ownerName: 'Ananya Sharma', // TODO: Pull from Auth
-      destinationLabel: 'Current Location',
-      destinationLatLng: _location!,
+    try {
+      final sid = await TrackingService.startSession(
+        ownerId: 'user_123', // TODO: Pull from Auth
+        ownerName: 'Ananya Sharma', // TODO: Pull from Auth
+        destinationLabel: 'Current Location',
+        destinationLatLng: _location!,
+      );
+      final registeredIds = await _shareWithRegisteredContacts(sid);
+
+      if (!mounted) return;
+      setState(() {
+        _sessionId = sid;
+        _sharedWithUserIds = registeredIds;
+        _mode = _TrackingMode.sharingOnly;
+      });
+
+      _startLocationStreaming();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Couldn't start sharing: $e")));
+    }
+  }
+
+  /// Best-effort — the risk-zone/nearby-facility overlay is a nice-to-have
+  /// on top of an already-started journey, so any failure here just means
+  /// the map shows the route without it, never blocks or reverts tracking.
+  Future<void> _loadJourneySafetyContext(JourneyPlan plan) async {
+    final mid = LatLng(
+      (plan.from.latitude + plan.to.latitude) / 2,
+      (plan.from.longitude + plan.to.longitude) / 2,
     );
-    final registeredIds = await _shareWithRegisteredContacts(sid);
+    try {
+      final assessment = await RiskService.assess(center: mid);
+      final facilities = await _fetchJourneyFacilities(mid);
+      if (!mounted) return;
+      setState(() {
+        _journeySafety = assessment;
+        _journeyFacilities = facilities;
+      });
+    } catch (_) {
+      // Leave both null/empty — journey tracking itself doesn't depend on it.
+    }
+  }
 
-    setState(() {
-      _sessionId = sid;
-      _sharedWithUserIds = registeredIds;
-      _mode = _TrackingMode.sharingOnly;
-    });
-
-    _startLocationStreaming();
+  /// Pauses/resumes what contacts see, without touching the journey
+  /// itself — the journey only ends via [_stop] (manual "End Journey") or
+  /// [_handleArrival] (automatic, on reaching the destination). Position
+  /// tracking and arrival detection keep running locally either way;
+  /// this only gates whether that position gets written to Firestore.
+  Future<void> _toggleSharing() async {
+    final next = !_sharingLive;
+    setState(() => _sharingLive = next);
+    if (_sessionId != null) {
+      try {
+        await TrackingService.setSharingPaused(_sessionId!, !next);
+      } catch (_) {
+        // Best-effort — worst case a contact's view just goes stale
+        // until the next successful location write.
+      }
+    }
   }
 
   Future<void> _stop() async {
@@ -152,6 +328,11 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
       _journey = null;
       _sessionId = null;
       _sharedWithUserIds = [];
+      _journeySafety = null;
+      _journeyFacilities = [];
+      _traveledKm = 0;
+      _arrivalHandled = false;
+      _sharingLive = true;
     });
   }
 
@@ -237,6 +418,10 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
             ),
           ),
           const SizedBox(height: 20),
+          if (_locationUnavailable && !_loadingLocation) ...[
+            _LocationRetryBanner(onRetry: _loadLocation),
+            const SizedBox(height: 10),
+          ],
           switch (_mode) {
             _TrackingMode.idle => _IdleState(
               location: _location,
@@ -258,10 +443,15 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
               journey: _journey!,
               location: _location,
               speedKmh: _speedKmh,
+              traveledKm: _traveledKm,
               geofenceEnabled: _geofenceEnabled,
               geofenceRadius: _geofenceRadius,
               sharedWithUserIds: _sharedWithUserIds,
-              onStop: _stop,
+              riskZones: _journeySafety?.zones ?? const [],
+              facilities: _journeyFacilities,
+              sharingLive: _sharingLive,
+              onToggleSharing: _toggleSharing,
+              onEndJourney: _stop,
               onShare: () => _openShareSheet(),
               onShowSharingStatus: _showSharingStatus,
             ),
@@ -350,6 +540,12 @@ class _IdleState extends StatelessWidget {
             label: 'Start a Journey',
             outlined: true,
             onPressed: onStartJourney,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "Add a destination next — you'll get to compare Fastest vs "
+            'Safest routes before you confirm.',
+            style: AppTextStyles.b5.copyWith(color: AppColors.neutral400),
           ),
         ],
       ),
@@ -474,38 +670,115 @@ Marker _profileMarker(LatLng point) {
   );
 }
 
+/// A police/hospital/clinic point fetched for the journey-in-progress map
+/// overlay — same three amenity types RouteSafetyService scores routes
+/// against, so what you see on the map matches what fed the safety score.
+class _JourneyFacility {
+  const _JourneyFacility({
+    required this.point,
+    required this.icon,
+    required this.color,
+  });
+  final LatLng point;
+  final IconData icon;
+  final Color color;
+}
+
+Future<List<_JourneyFacility>> _fetchJourneyFacilities(LatLng center) async {
+  const radius = 3000;
+  final query =
+      '[out:json][timeout:12];('
+      'node["amenity"="police"](around:$radius,${center.latitude},${center.longitude});'
+      'node["amenity"="hospital"](around:$radius,${center.latitude},${center.longitude});'
+      'node["amenity"="clinic"](around:$radius,${center.latitude},${center.longitude});'
+      ');out center 60;';
+
+  final response = await http
+      .post(
+        Uri.parse('https://overpass-api.de/api/interpreter'),
+        body: {'data': query},
+      )
+      .timeout(const Duration(seconds: 12));
+  if (response.statusCode != 200) return [];
+
+  final data = jsonDecode(response.body) as Map<String, dynamic>;
+  final elements = (data['elements'] as List).cast<Map<String, dynamic>>();
+
+  final result = <_JourneyFacility>[];
+  for (final e in elements) {
+    final lat = (e['lat'] as num?)?.toDouble();
+    final lon = (e['lon'] as num?)?.toDouble();
+    if (lat == null || lon == null) continue;
+    final amenity = (e['tags'] as Map?)?['amenity'] as String?;
+    final isPolice = amenity == 'police';
+    result.add(
+      _JourneyFacility(
+        point: LatLng(lat, lon),
+        icon: isPolice
+            ? Icons.local_police_rounded
+            : Icons.local_hospital_rounded,
+        color: isPolice ? const Color(0xFF2563EB) : const Color(0xFFE0334D),
+      ),
+    );
+  }
+  return result;
+}
+
 class _JourneyState extends StatelessWidget {
   const _JourneyState({
     required this.journey,
     required this.location,
     required this.speedKmh,
-    required this.onStop,
     required this.onShare,
     required this.onShowSharingStatus,
     required this.geofenceEnabled,
     required this.geofenceRadius,
     required this.sharedWithUserIds,
+    required this.sharingLive,
+    required this.onToggleSharing,
+    required this.onEndJourney,
+    this.riskZones = const [],
+    this.facilities = const [],
+    this.traveledKm = 0,
   });
 
   final JourneyPlan journey;
   final LatLng? location;
   final double speedKmh;
-  final VoidCallback onStop;
+  final double traveledKm;
   final VoidCallback onShare;
   final VoidCallback onShowSharingStatus;
   final bool geofenceEnabled;
   final double geofenceRadius;
+  final List<RiskZone> riskZones;
+  final List<_JourneyFacility> facilities;
   final List<String> sharedWithUserIds;
+
+  /// Whether live location is currently being pushed to contacts. Toggling
+  /// this (via [onToggleSharing]) never ends the journey — only
+  /// [onEndJourney] does that. See LiveTrackingTabState._toggleSharing /
+  /// _stop.
+  final bool sharingLive;
+  final VoidCallback onToggleSharing;
+  final VoidCallback onEndJourney;
 
   @override
   Widget build(BuildContext context) {
     final hasRoute = journey.routePoints.length >= 2;
-    final distanceKm =
+    final totalKm =
         journey.routeDistanceKm ??
         LocationService.distanceKm(journey.from, journey.to);
+    // "Remaining" is measured live (straight-line to the destination from
+    // wherever you actually are right now), not derived from traveledKm —
+    // that keeps it correct even if you deviate from the planned route.
+    // traveledKm is a separate running total of actual movement, summed
+    // from consecutive position-stream updates in LiveTrackingTabState.
+    final remainingKm = location != null
+        ? LocationService.distanceKm(location!, journey.to)
+        : totalKm;
     final etaMin =
         journey.routeDurationMin ??
-        (distanceKm / 25 * 60).clamp(2, 240).round(); // assumes ~25km/h avg
+        (totalKm / 25 * 60).clamp(2, 240).round(); // assumes ~25km/h avg
     return Column(
       children: [
         Container(
@@ -564,11 +837,35 @@ class _JourneyState extends StatelessWidget {
                             'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                         userAgentPackageName: 'com.safeher.app',
                       ),
+                      if (riskZones.isNotEmpty)
+                        CircleLayer(
+                          circles: [
+                            for (final z in riskZones)
+                              if (z.level != RiskLevel.safe)
+                                CircleMarker(
+                                  point: z.center,
+                                  radius: z.radiusMeters,
+                                  useRadiusInMeter: true,
+                                  color:
+                                      (z.level == RiskLevel.high
+                                              ? const Color(0xFFE0334D)
+                                              : const Color(0xFFF59E0B))
+                                          .withValues(alpha: 0.16),
+                                  borderColor: z.level == RiskLevel.high
+                                      ? const Color(0xFFE0334D)
+                                      : const Color(0xFFF59E0B),
+                                  borderStrokeWidth: 2,
+                                ),
+                          ],
+                        ),
                       if (geofenceEnabled)
                         CircleLayer(
                           circles: [
                             CircleMarker(
-                              point: journey.from,
+                              // Centered on the destination, not the
+                              // start — the geofence marks the arrival
+                              // zone you're heading into.
+                              point: journey.to,
                               radius: geofenceRadius,
                               useRadiusInMeter: true,
                               color: AppColors.primary.withValues(alpha: 0.10),
@@ -595,6 +892,8 @@ class _JourneyState extends StatelessWidget {
                             icon: Icons.flag_rounded,
                             color: Colors.black87,
                           ),
+                          for (final f in facilities)
+                            placeMarker(f.point, icon: f.icon, color: f.color),
                           _profileMarker(location ?? journey.from),
                         ],
                       ),
@@ -602,11 +901,17 @@ class _JourneyState extends StatelessWidget {
                   ),
                 ),
               ),
+              if (journey.routeExplanation != null) ...[
+                const SizedBox(height: 10),
+                _WhySafestCard(text: journey.routeExplanation!),
+              ],
               const SizedBox(height: 10),
               PrimaryButton(
-                label: 'Stop Sharing Live Location',
+                label: sharingLive
+                    ? 'Stop Sharing Live Location'
+                    : 'Resume Sharing Live Location',
                 outlined: true,
-                onPressed: onStop,
+                onPressed: onToggleSharing,
               ),
               const SizedBox(height: 10),
               PrimaryButton(label: 'Share This Trip', onPressed: onShare),
@@ -650,12 +955,17 @@ class _JourneyState extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   _StatColumn(
-                    value: '${distanceKm.toStringAsFixed(1)} Km',
-                    label: 'Distance',
+                    value: '${remainingKm.toStringAsFixed(1)} Km',
+                    label: 'Left',
                   ),
-                  const SizedBox(width: 28),
+                  const SizedBox(width: 20),
+                  _StatColumn(
+                    value: '${traveledKm.toStringAsFixed(1)} Km',
+                    label: 'Traveled',
+                  ),
+                  const SizedBox(width: 20),
                   _StatColumn(value: '$etaMin Min', label: 'ETA'),
-                  const SizedBox(width: 28),
+                  const SizedBox(width: 20),
                   _StatColumn(
                     value: '${speedKmh.toStringAsFixed(1)} Kmph',
                     label: 'Speed',
@@ -665,7 +975,101 @@ class _JourneyState extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: 10),
+        // Deliberately separate from "Stop Sharing" above and styled to
+        // read as more final — this is the only manual way to end the
+        // journey before automatic arrival detection would (see
+        // LiveTrackingTabState._checkArrival / _handleArrival).
+        TextButton.icon(
+          onPressed: onEndJourney,
+          icon: const Icon(
+            Icons.flag_circle_outlined,
+            size: 18,
+            color: Color(0xFFB3261E),
+          ),
+          label: const Text(
+            'End Journey',
+            style: TextStyle(
+              color: Color(0xFFB3261E),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
       ],
+    );
+  }
+}
+
+/// Shown when LocationService fell back to its hardcoded default (Dhaka)
+/// instead of a real GPS fix — usually a browser permission-prompt timing
+/// issue on first load. Makes the fallback visible instead of silently
+/// showing a wrong city as if it were real, and gives a one-tap retry
+/// instead of requiring a full page refresh.
+class _LocationRetryBanner extends StatelessWidget {
+  const _LocationRetryBanner({required this.onRetry});
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7ED),
+        borderRadius: BorderRadius.circular(AppRadius.r4),
+        border: Border.all(color: const Color(0xFFFCD9A8)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.location_off_rounded,
+            size: 18,
+            color: Color(0xFFB45309),
+          ),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              "Couldn't get your real location — showing a fallback. "
+              'This is usually a browser permission prompt that needs a tap.',
+              style: TextStyle(fontSize: 12, color: Color(0xFF92400E)),
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
+    );
+  }
+}
+
+/// Carries forward the "why this is the safest route" sentence from
+/// RouteSafetyService, shown once on the journey-in-progress screen so
+/// the reasoning isn't only visible on the route-selection screen you've
+/// already left.
+class _WhySafestCard extends StatelessWidget {
+  const _WhySafestCard({required this.text});
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF8F0),
+        borderRadius: BorderRadius.circular(AppRadius.r4),
+        border: Border.all(color: const Color(0xFFBBE5C3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.shield_rounded, size: 18, color: Color(0xFF16A34A)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: AppTextStyles.b4.copyWith(color: const Color(0xFF166534)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

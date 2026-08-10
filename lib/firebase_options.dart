@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -50,19 +47,27 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyBbKC5YmnDT-biRKORDokTS-UvYECqu5N8',
-    appId: '1:831160190675:android:c0d2539b59e698b121b626',
-    messagingSenderId: '831160190675',
-    projectId: 'safeher-206b6',
-    storageBucket: 'safeher-206b6.firebasestorage.app',
+    apiKey: 'AIzaSyCu3VCQIUW_bf908KA7717pa2k_8f7XW6E',
+    appId: '1:678916309599:android:31a56e768d17d68457d1ea',
+    messagingSenderId: '678916309599',
+    projectId: 'safe-her-project-258df',
+    storageBucket: 'safe-her-project-258df.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBvuYfpmzuD94UfKi5E7yKvf39ruXt68lw',
-    appId: '1:831160190675:ios:9832a3e44d7bab1221b626',
-    messagingSenderId: '831160190675',
-    projectId: 'safeher-206b6',
-    storageBucket: 'safeher-206b6.firebasestorage.app',
+    apiKey: 'AIzaSyDjnTAyu0PcqnRoVF2rQupLGapRCuZcCiw',
+    appId: '1:678916309599:ios:c8299cef80216d7457d1ea',
+    messagingSenderId: '678916309599',
+    projectId: 'safe-her-project-258df',
+    storageBucket: 'safe-her-project-258df.firebasestorage.app',
     iosBundleId: 'com.example.safeHer',
+  );
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyB_J8q65RVlHdENPXCPftGOuOIupd2OOpQ',
+    appId: '1:678916309599:web:a54fdf455a1603e057d1ea',
+    messagingSenderId: '678916309599',
+    projectId: 'safe-her-project-258df',
+    authDomain: 'safe-her-project-258df.firebaseapp.com',
+    storageBucket: 'safe-her-project-258df.firebasestorage.app',
+    measurementId: 'G-CBNY3W5KEX',
   );
 }

@@ -1,5 +1,1 @@
-{
-  "firestore": {
-    "rules": "firestore.rules"
-  }
-}
+{"firestore":{"rules":"firestore.rules"},"flutter":{"platforms":{"android":{"default":{"projectId":"safe-her-project-258df","appId":"1:678916309599:android:31a56e768d17d68457d1ea","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"safe-her-project-258df","configurations":{"android":"1:678916309599:android:31a56e768d17d68457d1ea","ios":"1:678916309599:ios:c8299cef80216d7457d1ea","web":"1:678916309599:web:a54fdf455a1603e057d1ea"}}}}}}

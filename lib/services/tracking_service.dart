@@ -49,7 +49,31 @@ class TrackingService {
     });
   }
 
-  static Future<void> shareWithUsers(String sessionId, List<String> userIds) async {
+  /// Ends the session the same way [endSession] does, but flags it as a
+  /// safe arrival rather than a plain manual stop — see
+  /// [LiveSession.arrivedSafely]. Any contact with the tracking viewer
+  /// open sees this the moment it's written, no action needed on their
+  /// end.
+  static Future<void> endSessionOnArrival(String sessionId) async {
+    await _db.collection('live_sessions').doc(sessionId).update({
+      'status': 'ended',
+      'arrivedSafely': true,
+    });
+  }
+
+  /// Toggled by "Stop/Resume Sharing Live Location" during a journey —
+  /// never touches `status`, so it can't accidentally end the journey.
+  /// See LiveSession.sharingPaused.
+  static Future<void> setSharingPaused(String sessionId, bool paused) async {
+    await _db.collection('live_sessions').doc(sessionId).update({
+      'sharingPaused': paused,
+    });
+  }
+
+  static Future<void> shareWithUsers(
+    String sessionId,
+    List<String> userIds,
+  ) async {
     await _db.collection('live_sessions').doc(sessionId).update({
       'sharedWithUserIds': FieldValue.arrayUnion(userIds),
     });

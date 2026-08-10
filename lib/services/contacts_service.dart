@@ -2,11 +2,16 @@ import '../models/contact.dart';
 
 class ContactsService {
   ContactsService._();
-  
+
   static final List<Contact> _contacts = [
     Contact(id: '1', name: 'Mom', phone: '+91 98765 43210', userId: 'user_mom'),
     Contact(id: '2', name: 'Dad', phone: '+91 98765 43211'),
-    Contact(id: '3', name: 'Priya (Neighbour)', phone: '+91 98765 43212', userId: 'user_priya'),
+    Contact(
+      id: '3',
+      name: 'Priya (Neighbour)',
+      phone: '+91 98765 43212',
+      userId: 'user_priya',
+    ),
   ];
 
   static List<Contact> get contacts => List.unmodifiable(_contacts);

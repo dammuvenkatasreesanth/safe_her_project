@@ -34,9 +34,9 @@ class _ContactWhatsAppTileState extends State<ContactWhatsAppTile> {
     if (ok) {
       setState(() => _opened = true);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Couldn't open WhatsApp")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Couldn't open WhatsApp")));
     }
   }
 

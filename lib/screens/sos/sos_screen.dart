@@ -763,9 +763,9 @@ class _DeliveryTileState extends State<_DeliveryTile> {
       if (ok) _opened = true;
     });
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Couldn't open WhatsApp")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Couldn't open WhatsApp")));
     }
   }
 

@@ -88,9 +88,15 @@ class _LiveTrackingView extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           decoration: const BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.r6)),
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(AppRadius.r6),
+            ),
             boxShadow: [
-              BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2)),
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 10,
+                offset: Offset(0, -2),
+              ),
             ],
           ),
           child: Column(
@@ -103,22 +109,50 @@ class _LiveTrackingView extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Heading to', style: AppTextStyles.b5),
-                      Text(session.destinationLabel, style: AppTextStyles.semibold16),
+                      Text(
+                        session.destinationLabel,
+                        style: AppTextStyles.semibold16,
+                      ),
                     ],
                   ),
                   if (session.etaMinutes != null)
                     _StatItem(label: 'ETA', value: '${session.etaMinutes} min'),
                 ],
               ),
+              if (session.sharingPaused) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.pause_circle_outline,
+                      size: 16,
+                      color: AppColors.neutral400,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Still on her way — live location sharing is paused',
+                      style: AppTextStyles.b5.copyWith(
+                        color: AppColors.neutral400,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 16),
               if (session.vehicleNumber != null)
                 Row(
                   children: [
-                    const Icon(Icons.directions_car, size: 16, color: AppColors.neutral400),
+                    const Icon(
+                      Icons.directions_car,
+                      size: 16,
+                      color: AppColors.neutral400,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'Vehicle: ${session.vehicleNumber}',
-                      style: AppTextStyles.b3.copyWith(color: AppColors.neutral900),
+                      style: AppTextStyles.b3.copyWith(
+                        color: AppColors.neutral900,
+                      ),
                     ),
                   ],
                 ),
@@ -136,18 +170,28 @@ class _TripEndedView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final arrived = session.arrivedSafely;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.check_circle_outline, size: 80, color: Colors.green),
+            Icon(
+              arrived ? Icons.verified_rounded : Icons.check_circle_outline,
+              size: 80,
+              color: Colors.green,
+            ),
             const SizedBox(height: 24),
-            Text('Trip Ended', style: AppTextStyles.h5),
+            Text(
+              arrived ? 'Reached Destination' : 'Trip Ended',
+              style: AppTextStyles.h5,
+            ),
             const SizedBox(height: 8),
             Text(
-              '${session.ownerName} has ended this journey safely.',
+              arrived
+                  ? '${session.ownerName} reached ${session.destinationLabel} safely.'
+                  : '${session.ownerName} has ended this journey safely.',
               textAlign: TextAlign.center,
               style: AppTextStyles.b2,
             ),
@@ -169,9 +213,7 @@ class _ErrorView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Text('Error loading session: $error'),
-    );
+    return Center(child: Text('Error loading session: $error'));
   }
 }
 
