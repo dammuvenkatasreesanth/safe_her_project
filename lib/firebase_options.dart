@@ -50,17 +50,13 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyD6NY_wyyLWeTIB5T7tX3G6cdPfdGaHvZ0',
-    appId: '1:787237729831:android:8ec820af49bc1e82694002',
-    messagingSenderId: '787237729831',
-    projectId: 'safeher-9ca47',
-    storageBucket: 'safeher-9ca47.firebasestorage.app',
+    apiKey: 'AIzaSyBbKC5YmnDT-biRKORDokTS-UvYECqu5N8',
+    appId: '1:831160190675:android:c0d2539b59e698b121b626',
+    messagingSenderId: '831160190675',
+    projectId: 'safeher-206b6',
+    storageBucket: 'safeher-206b6.firebasestorage.app',
   );
 
-  // NOTE: still pointing at the old "safeher-206b6" project — no iOS app
-  // has been registered on the new "safeher-9ca47" project yet. Register
-  // one in Firebase Console (or via `flutterfire configure`) before
-  // building for iOS, otherwise it'll hit the old, unrelated project.
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyBvuYfpmzuD94UfKi5E7yKvf39ruXt68lw',
     appId: '1:831160190675:ios:9832a3e44d7bab1221b626',

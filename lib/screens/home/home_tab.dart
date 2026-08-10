@@ -50,11 +50,19 @@ class _HomeTabState extends State<HomeTab> {
             accuracy: LocationAccuracy.best,
             distanceFilter: 40,
           ),
-        ).listen((pos) {
-          final loc = LatLng(pos.latitude, pos.longitude);
-          if (mounted) setState(() => _location = loc);
-          _maybeReverseGeocode(loc);
-        });
+        ).listen(
+          (pos) {
+            final loc = LatLng(pos.latitude, pos.longitude);
+            if (mounted) setState(() => _location = loc);
+            _maybeReverseGeocode(loc);
+          },
+          // Permission can be denied/revoked after this stream starts (e.g.
+          // the OS permission dialog hasn't been answered yet on first
+          // launch) — without this the stream dies silently and the map
+          // never updates again. The initial getCurrentLocation() call
+          // above already has its own fallback, so just drop the error.
+          onError: (_) {},
+        );
   }
 
   void _maybeReverseGeocode(LatLng loc) {

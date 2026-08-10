@@ -4,10 +4,12 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../models/contact.dart';
+import '../../services/auth_service.dart';
 import '../../services/location_service.dart';
 import '../../services/share_service.dart';
 import '../../services/tracking_service.dart';
 import '../../services/contacts_service.dart';
+import '../../services/user_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_map.dart';
 import '../../widgets/contact_whatsapp_tile.dart';
@@ -48,13 +50,27 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
     super.dispose();
   }
 
+  /// The signed-in user's uid and display name, for tagging tracking
+  /// sessions as their owner. Falls back to the account email (or "You" if
+  /// even that isn't available yet) since email/password sign-in doesn't
+  /// set a Firebase Auth display name — the real name lives in the
+  /// Firestore profile written during setup.
+  Future<(String, String)> _currentOwner() async {
+    final uid = AuthService.currentUser!.uid;
+    final profile = await UserRepository.getProfile(uid);
+    final name = profile?.fullName.trim();
+    final fallback = AuthService.currentUser?.email ?? 'You';
+    return (uid, (name == null || name.isEmpty) ? fallback : name);
+  }
+
   Future<void> _startJourney() async {
     if (_location == null) return;
     final plan = await showStartJourneySheet(context, _location!);
     if (plan != null && mounted) {
+      final (ownerId, ownerName) = await _currentOwner();
       final sid = await TrackingService.startSession(
-        ownerId: 'user_123', // TODO: Pull from Auth
-        ownerName: 'Ananya Sharma', // TODO: Pull from Auth
+        ownerId: ownerId,
+        ownerName: ownerName,
         destinationLabel: plan.toLabel,
         destinationLatLng: plan.to,
         vehicleNumber: plan.vehicleNumber,
@@ -95,23 +111,29 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
             accuracy: LocationAccuracy.best,
             distanceFilter: 50, // Update every 50 meters
           ),
-        ).listen((pos) {
-          final loc = LatLng(pos.latitude, pos.longitude);
-          // Position.speed is m/s from the GPS hardware; convert to km/h and
-          // guard against the occasional negative/NaN reading at low signal.
-          final speed = pos.speed.isFinite && pos.speed > 0
-              ? pos.speed * 3.6
-              : 0.0;
-          if (mounted) {
-            setState(() {
-              _location = loc;
-              _speedKmh = speed;
-            });
-          }
-          if (_sessionId != null) {
-            TrackingService.updateLocation(_sessionId!, loc);
-          }
-        });
+        ).listen(
+          (pos) {
+            final loc = LatLng(pos.latitude, pos.longitude);
+            // Position.speed is m/s from the GPS hardware; convert to km/h and
+            // guard against the occasional negative/NaN reading at low signal.
+            final speed = pos.speed.isFinite && pos.speed > 0
+                ? pos.speed * 3.6
+                : 0.0;
+            if (mounted) {
+              setState(() {
+                _location = loc;
+                _speedKmh = speed;
+              });
+            }
+            if (_sessionId != null) {
+              TrackingService.updateLocation(_sessionId!, loc);
+            }
+          },
+          // Without this, a permission error (denied mid-journey, GPS
+          // toggled off, etc.) kills the stream silently and live tracking
+          // just freezes with no error surfaced and no retry.
+          onError: (_) {},
+        );
   }
 
   /// Starts sharing the current location, same as tapping "Share Your
@@ -125,9 +147,10 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
 
   Future<void> _shareOnly() async {
     if (_location == null) return;
+    final (ownerId, ownerName) = await _currentOwner();
     final sid = await TrackingService.startSession(
-      ownerId: 'user_123', // TODO: Pull from Auth
-      ownerName: 'Ananya Sharma', // TODO: Pull from Auth
+      ownerId: ownerId,
+      ownerName: ownerName,
       destinationLabel: 'Current Location',
       destinationLatLng: _location!,
     );

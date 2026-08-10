@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../models/user_profile.dart';
+import '../../services/auth_service.dart';
+import '../../services/user_repository.dart';
 import '../../theme/app_theme.dart';
 import '../behavior/behavior_monitor_screen.dart';
 import '../chatbot/chatbot_screen.dart';
@@ -9,6 +12,42 @@ import 'edit_profile_screen.dart';
 
 class ProfileTab extends StatelessWidget {
   const ProfileTab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = AuthService.currentUser?.uid;
+    return StreamBuilder<UserProfile?>(
+      stream: uid == null ? null : UserRepository.watchProfile(uid),
+      builder: (context, snapshot) {
+        final profile = snapshot.data;
+        final name = profile?.fullName.trim();
+        final displayName = (name == null || name.isEmpty)
+            ? 'Your Profile'
+            : name;
+        final displaySubtitle = profile?.email ?? AuthService.currentUser?.email ?? '';
+        final initial = displayName.isNotEmpty
+            ? displayName[0].toUpperCase()
+            : '?';
+        return _ProfileTabBody(
+          displayName: displayName,
+          displaySubtitle: displaySubtitle,
+          initial: initial,
+        );
+      },
+    );
+  }
+}
+
+class _ProfileTabBody extends StatelessWidget {
+  const _ProfileTabBody({
+    required this.displayName,
+    required this.displaySubtitle,
+    required this.initial,
+  });
+
+  final String displayName;
+  final String displaySubtitle;
+  final String initial;
 
   @override
   Widget build(BuildContext context) {
@@ -84,26 +123,30 @@ class ProfileTab extends StatelessWidget {
                   ),
                   alignment: Alignment.center,
                   child: Text(
-                    'A',
+                    initial,
                     style: AppTextStyles.h5.copyWith(color: AppColors.primary),
                   ),
                 ),
                 const SizedBox(width: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Ananya Sharma',
-                      style: AppTextStyles.semibold16.copyWith(fontSize: 18),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '+91 93477 897812',
-                      style: AppTextStyles.b3.copyWith(
-                        color: AppColors.neutral400,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayName,
+                        style: AppTextStyles.semibold16.copyWith(fontSize: 18),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 4),
+                      Text(
+                        displaySubtitle,
+                        style: AppTextStyles.b3.copyWith(
+                          color: AppColors.neutral400,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
                 ),
                 const Spacer(),
                 const Icon(
