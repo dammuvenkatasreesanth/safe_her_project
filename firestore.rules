@@ -28,5 +28,19 @@ service cloud.firestore {
 //
 //       allow delete: if false;
 //     }
+//
+//     // Module 2 — Contacts. Module 2 now signs every device in with
+//     // Firebase Anonymous Auth (see lib/services/auth_service.dart), so
+//     // request.auth.uid is real and stable even before Module 1 ships
+//     // real phone verification — this rule can be enabled today.
+//     match /users/{userId}/contacts/{contactId} {
+//       allow read, write: if request.auth != null &&
+//         request.auth.uid == userId;
+//     }
 //   }
 // }
+//
+// Left as a suggestion rather than switched on here because the root
+// wildcard rule above is still relied on by other modules that aren't
+// auth-gated yet — flipping it is a whole-team decision, not a Module 2
+// one. Ping the team lead when other modules are ready to move off it.
