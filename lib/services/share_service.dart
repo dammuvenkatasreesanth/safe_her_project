@@ -1,3 +1,4 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -29,6 +30,35 @@ class ShareService {
 
   /// Hands [message] to the OS share sheet (WhatsApp, SMS, email, etc.).
   static void shareViaOtherApps(String message) => Share.share(message);
+
+  /// Opens the device's native SMS composer pre-filled with [message] for
+  /// [phone] — the "SMS Fallback" path, since it needs no data connection
+  /// at all (unlike WhatsApp/Firestore). The user still taps Send, same as
+  /// the WhatsApp flow; there's no SMS gateway/backend in this app.
+  static Future<bool> sendSms(String phone, String message) async {
+    final uri = Uri(
+      scheme: 'sms',
+      path: phone,
+      queryParameters: {'body': message},
+    );
+    try {
+      return await launchUrl(uri);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// True when the device has no network path at all (airplane mode, no
+  /// signal, wifi/data both off) — the condition the "SMS Fallback" setting
+  /// cares about, since SMS doesn't need data connectivity to send.
+  static Future<bool> hasNoConnection() async {
+    try {
+      final results = await Connectivity().checkConnectivity();
+      return results.every((r) => r == ConnectivityResult.none);
+    } catch (_) {
+      return false;
+    }
+  }
 
   /// A plain "here's my current location" message with a maps pin link —
   /// used wherever there's no live SafeHer tracking session behind it.

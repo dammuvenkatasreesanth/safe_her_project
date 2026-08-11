@@ -44,6 +44,33 @@ class IncidentService {
     return docRef.id;
   }
 
+  /// Logs an automatic safety event — a Geofence "left the safe zone" alert
+  /// or an Auto Safe Arrival "home safe" notice — using the same `sos`
+  /// type as a manually-triggered alert (not `report`, since the user
+  /// didn't submit anything) so History shows it as a real-time safety
+  /// event rather than a filed report.
+  static Future<String> submitSafetyEvent({
+    required String title,
+    required String subtitle,
+    required IncidentStatus status,
+    String? locationLabel,
+    LatLng? locationLatLng,
+  }) async {
+    final incident = Incident(
+      id: '',
+      reporterId: currentUserId,
+      type: IncidentType.sos,
+      status: status,
+      title: title,
+      subtitle: subtitle,
+      createdAt: DateTime.now(),
+      locationLabel: locationLabel,
+      locationLatLng: locationLatLng,
+    );
+    final docRef = await _collection.add(incident.toMap());
+    return docRef.id;
+  }
+
   /// Submits a new incident report from the Report screen.
   static Future<String> submitReport({
     required String category,

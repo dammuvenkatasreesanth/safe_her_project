@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../services/routing_service.dart';
+import '../../services/safety_score_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_map.dart';
 import '../../widgets/primary_button.dart';
@@ -50,6 +51,25 @@ class _SelectRouteScreenState extends State<SelectRouteScreen> {
       _routes = routes;
       _loading = false;
     });
+    _scoreRoutes();
+  }
+
+  /// Fills in each route's [RouteOption.safetyLevel] as its Overpass fetch
+  /// resolves, independently — routes render immediately, safety tags
+  /// arrive a moment later rather than blocking the whole screen on them.
+  void _scoreRoutes() {
+    for (var i = 0; i < _routes.length; i++) {
+      final index = i;
+      SafetyScoreService.scoreRoute(_routes[index].points).then((level) {
+        if (!mounted || index >= _routes.length) return;
+        setState(() {
+          _routes = [
+            for (var j = 0; j < _routes.length; j++)
+              j == index ? _routes[j].copyWith(safetyLevel: level) : _routes[j],
+          ];
+        });
+      });
+    }
   }
 
   @override
@@ -276,9 +296,40 @@ class _RouteCard extends StatelessWidget {
                 ],
               ),
             ),
+            _SafetyChip(level: route.safetyLevel),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _SafetyChip extends StatelessWidget {
+  const _SafetyChip({required this.level});
+
+  final RiskLevel? level;
+
+  @override
+  Widget build(BuildContext context) {
+    if (level == null) {
+      return const SizedBox(
+        width: 12,
+        height: 12,
+        child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.neutral300),
+      );
+    }
+    final (color, label) = switch (level!) {
+      RiskLevel.safe => (const Color(0xFF16A34A), 'Safer'),
+      RiskLevel.moderate => (const Color(0xFFF59E0B), 'Moderate'),
+      RiskLevel.high => (const Color(0xFFE0334D), 'Higher risk'),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(label, style: AppTextStyles.b5.copyWith(color: color)),
     );
   }
 }

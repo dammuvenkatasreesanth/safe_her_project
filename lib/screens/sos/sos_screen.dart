@@ -8,9 +8,11 @@ import 'package:latlong2/latlong.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import '../../models/contact.dart';
 import '../../services/contacts_service.dart';
+import '../../services/evidence_service.dart';
 import '../../services/geocoding_service.dart';
 import '../../services/incident_service.dart';
 import '../../services/location_service.dart';
+import '../../services/settings_service.dart';
 import '../../services/share_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_map.dart';
@@ -21,7 +23,12 @@ import '../evidence/evidence_screen.dart';
 enum _SosState { idle, countingDown, sent }
 
 class SosScreen extends StatefulWidget {
-  const SosScreen({super.key});
+  const SosScreen({super.key, this.autoTrigger = false});
+
+  /// True when this screen was opened by Voice Command hearing a trigger
+  /// phrase — starts the countdown immediately instead of waiting for a
+  /// hold/shake, same end state either way.
+  final bool autoTrigger;
 
   @override
   State<SosScreen> createState() => _SosScreenState();
@@ -56,6 +63,9 @@ class _SosScreenState extends State<SosScreen> {
       if (mounted) setState(() => _locationLabel = label);
     });
     _listenForShake();
+    if (widget.autoTrigger) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _startCountdown());
+    }
   }
 
   void _listenForShake() {
@@ -97,7 +107,8 @@ class _SosScreenState extends State<SosScreen> {
           contactNames: _contacts.map((c) => c.name).toList(),
           locationLabel: _locationLabel,
           locationLatLng: _location,
-        ).catchError((_) => '');
+        ).then((id) => EvidenceService.startRecording(incidentId: id))
+            .catchError((_) => false);
       } else {
         HapticFeedback.lightImpact();
         setState(() => _count--);
@@ -107,6 +118,11 @@ class _SosScreenState extends State<SosScreen> {
 
   void _cancel() {
     _timer?.cancel();
+    if (_state == _SosState.sent) {
+      // A recording only exists once the alert actually went out — a
+      // cancelled countdown never started one.
+      EvidenceService.stopRecording().catchError((_) => null);
+    }
     setState(() => _state = _SosState.idle);
   }
 
@@ -562,12 +578,25 @@ class _SentViewState extends State<_SentView>
   )..repeat();
   Timer? _clock;
   Duration _elapsed = Duration.zero;
+  bool _showSms = false;
+  bool _weakConnection = false;
 
   @override
   void initState() {
     super.initState();
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _elapsed += const Duration(seconds: 1));
+    });
+    _checkSmsFallback();
+  }
+
+  Future<void> _checkSmsFallback() async {
+    final enabled = await SettingsService.getSmsFallback();
+    final noConnection = await ShareService.hasNoConnection();
+    if (!mounted) return;
+    setState(() {
+      _showSms = enabled;
+      _weakConnection = noConnection;
     });
   }
 
@@ -661,6 +690,35 @@ class _SentViewState extends State<_SentView>
             ),
           ),
           const SizedBox(height: 16),
+          if (_weakConnection) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(AppRadius.r4),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.signal_cellular_connected_no_internet_0_bar_rounded,
+                    size: 16,
+                    color: Color(0xFF92400E),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _showSms
+                          ? "No data connection — use Send SMS below, it doesn't need one."
+                          : 'No data connection. Turn on SMS Fallback in Accessibility settings to alert contacts without data.',
+                      style: AppTextStyles.b5.copyWith(color: const Color(0xFF92400E)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
@@ -670,7 +728,11 @@ class _SentViewState extends State<_SentView>
           ),
           const SizedBox(height: 10),
           for (final contact in widget.contacts)
-            _DeliveryTile(contact: contact, location: widget.location),
+            _DeliveryTile(
+              contact: contact,
+              location: widget.location,
+              showSms: _showSms,
+            ),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -755,35 +817,63 @@ class _RecordingBadgeState extends State<_RecordingBadge>
 }
 
 class _DeliveryTile extends StatefulWidget {
-  const _DeliveryTile({required this.contact, required this.location});
+  const _DeliveryTile({
+    required this.contact,
+    required this.location,
+    required this.showSms,
+  });
 
   final Contact contact;
   final LatLng? location;
+
+  /// Whether to also offer the SMS-fallback action — true when the "SMS
+  /// Fallback" setting is on and/or the device currently has no data
+  /// connection, so WhatsApp delivery can't be relied on.
+  final bool showSms;
 
   @override
   State<_DeliveryTile> createState() => _DeliveryTileState();
 }
 
 class _DeliveryTileState extends State<_DeliveryTile> {
-  bool _opened = false;
-  bool _sending = false;
+  bool _whatsAppOpened = false;
+  bool _whatsAppSending = false;
+  bool _smsOpened = false;
+  bool _smsSending = false;
 
-  Future<void> _open() async {
-    if (widget.location == null || _sending) return;
-    setState(() => _sending = true);
-    final message = ShareService.buildLocationMessage(
-      widget.location!,
-      note: 'SOS! I need help.',
-    );
-    final ok = await ShareService.openWhatsApp(widget.contact.phone, message);
+  String get _message => ShareService.buildLocationMessage(
+    widget.location!,
+    note: 'SOS! I need help.',
+  );
+
+  Future<void> _openWhatsApp() async {
+    if (widget.location == null || _whatsAppSending) return;
+    setState(() => _whatsAppSending = true);
+    final ok = await ShareService.openWhatsApp(widget.contact.phone, _message);
     if (!mounted) return;
     setState(() {
-      _sending = false;
-      if (ok) _opened = true;
+      _whatsAppSending = false;
+      if (ok) _whatsAppOpened = true;
     });
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Couldn't open WhatsApp")),
+      );
+    }
+  }
+
+  Future<void> _sendSms() async {
+    if (widget.location == null || _smsSending) return;
+    setState(() => _smsSending = true);
+    final ok = await ShareService.sendSms(widget.contact.phone, _message);
+    if (!mounted) return;
+    setState(() {
+      _smsSending = false;
+      if (ok) _smsOpened = true;
+    });
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't open the SMS app")),
       );
     }
   }
@@ -798,50 +888,99 @@ class _DeliveryTileState extends State<_DeliveryTile> {
         border: Border.all(color: AppColors.neutral300),
         borderRadius: BorderRadius.circular(AppRadius.r4),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(widget.contact.name, style: AppTextStyles.semibold16),
-          const Spacer(),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
-            child: _opened
-                ? Row(
-                    key: const ValueKey('opened'),
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Opened in WhatsApp',
-                        style: AppTextStyles.b5.copyWith(
-                          color: AppColors.primary,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      const Icon(
-                        Icons.check_circle,
-                        color: AppColors.primary,
-                        size: 18,
-                      ),
-                    ],
-                  )
-                : _sending
-                ? const SizedBox(
-                    key: ValueKey('sending'),
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.neutral400,
-                    ),
-                  )
-                : TextButton.icon(
-                    key: const ValueKey('open'),
-                    onPressed: _open,
-                    icon: const Icon(Icons.chat_bubble_rounded, size: 16),
-                    label: const Text('Open in WhatsApp'),
-                  ),
+          Row(
+            children: [
+              Text(widget.contact.name, style: AppTextStyles.semibold16),
+              const Spacer(),
+              _DeliveryAction(
+                opened: _whatsAppOpened,
+                sending: _whatsAppSending,
+                openedLabel: 'Opened in WhatsApp',
+                actionLabel: 'Open in WhatsApp',
+                icon: Icons.chat_bubble_rounded,
+                onPressed: _openWhatsApp,
+              ),
+            ],
           ),
+          if (widget.showSms) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                const Spacer(),
+                _DeliveryAction(
+                  opened: _smsOpened,
+                  sending: _smsSending,
+                  openedLabel: 'Sent via SMS',
+                  actionLabel: 'Send SMS',
+                  icon: Icons.sms_rounded,
+                  onPressed: _sendSms,
+                ),
+              ],
+            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+class _DeliveryAction extends StatelessWidget {
+  const _DeliveryAction({
+    required this.opened,
+    required this.sending,
+    required this.openedLabel,
+    required this.actionLabel,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final bool opened;
+  final bool sending;
+  final String openedLabel;
+  final String actionLabel;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      child: opened
+          ? Row(
+              key: const ValueKey('opened'),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  openedLabel,
+                  style: AppTextStyles.b5.copyWith(color: AppColors.primary),
+                ),
+                const SizedBox(width: 5),
+                const Icon(
+                  Icons.check_circle,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
+              ],
+            )
+          : sending
+          ? const SizedBox(
+              key: ValueKey('sending'),
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.neutral400,
+              ),
+            )
+          : TextButton.icon(
+              key: const ValueKey('open'),
+              onPressed: onPressed,
+              icon: Icon(icon, size: 16),
+              label: Text(actionLabel),
+            ),
     );
   }
 }

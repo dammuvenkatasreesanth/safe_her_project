@@ -2,21 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../services/location_service.dart';
+import '../../services/safety_score_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_map.dart';
 import '../../widgets/screen_header.dart';
 
-/// Frontend shell for Module 5 (Safe Route & Risk Zone Prediction).
-/// Risk zones here are mock data — swap `_mockZones` for a real scoring
-/// service (crime stats + time-of-day + lighting + crowd density) later.
+/// Module 5 (Safe Route & Risk Zone Prediction). Zone positions are a
+/// fixed offset pattern around the user (there's no free source for real
+/// neighborhood boundaries), but each zone's color comes from a real,
+/// live-fetched heuristic — see SafetyScoreService — not hardcoded levels.
 class SafeRouteScreen extends StatefulWidget {
   const SafeRouteScreen({super.key});
 
   @override
   State<SafeRouteScreen> createState() => _SafeRouteScreenState();
 }
-
-enum _RiskLevel { safe, moderate, high }
 
 class _RiskZone {
   const _RiskZone({
@@ -26,52 +26,56 @@ class _RiskZone {
   });
   final LatLng offset;
   final double radius;
-  final _RiskLevel level;
+  final RiskLevel level;
 
   Color get color => switch (level) {
-    _RiskLevel.safe => const Color(0xFF16A34A),
-    _RiskLevel.moderate => const Color(0xFFF59E0B),
-    _RiskLevel.high => const Color(0xFFE0334D),
+    RiskLevel.safe => const Color(0xFF16A34A),
+    RiskLevel.moderate => const Color(0xFFF59E0B),
+    RiskLevel.high => const Color(0xFFE0334D),
   };
 }
 
 class _SafeRouteScreenState extends State<SafeRouteScreen> {
   LatLng? _location;
+  List<_RiskZone>? _zones;
 
   @override
   void initState() {
     super.initState();
-    LocationService.getCurrentLocation().then((loc) {
-      if (mounted) setState(() => _location = loc);
+    LocationService.getCurrentLocation().then((loc) async {
+      if (!mounted) return;
+      setState(() => _location = loc);
+      await _loadZones(loc);
     });
   }
 
-  List<_RiskZone> _mockZones(LatLng center) => [
-    _RiskZone(
-      offset: LatLng(center.latitude + 0.004, center.longitude + 0.003),
-      radius: 220,
-      level: _RiskLevel.safe,
-    ),
-    _RiskZone(
-      offset: LatLng(center.latitude - 0.003, center.longitude + 0.005),
-      radius: 180,
-      level: _RiskLevel.moderate,
-    ),
-    _RiskZone(
-      offset: LatLng(center.latitude - 0.006, center.longitude - 0.004),
-      radius: 160,
-      level: _RiskLevel.high,
-    ),
-    _RiskZone(
-      offset: LatLng(center.latitude + 0.006, center.longitude - 0.002),
-      radius: 200,
-      level: _RiskLevel.safe,
-    ),
-  ];
+  /// Four fixed points around the user, each scored for real via a live
+  /// Overpass fetch (police + street-lamp density, discounted at night —
+  /// see SafetyScoreService for the exact heuristic and why it's honest
+  /// about not being verified crime data).
+  Future<void> _loadZones(LatLng center) async {
+    final offsets = [
+      LatLng(center.latitude + 0.004, center.longitude + 0.003),
+      LatLng(center.latitude - 0.003, center.longitude + 0.005),
+      LatLng(center.latitude - 0.006, center.longitude - 0.004),
+      LatLng(center.latitude + 0.006, center.longitude - 0.002),
+    ];
+    final levels = await Future.wait(
+      offsets.map((o) => SafetyScoreService.scoreZone(o)),
+    );
+    if (!mounted) return;
+    setState(() {
+      _zones = [
+        for (var i = 0; i < offsets.length; i++)
+          _RiskZone(offset: offsets[i], radius: 200, level: levels[i]),
+      ];
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final zones = _location == null ? <_RiskZone>[] : _mockZones(_location!);
+    final zones = _zones ?? <_RiskZone>[];
+    final loadingZones = _location != null && _zones == null;
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
@@ -112,6 +116,12 @@ class _SafeRouteScreenState extends State<SafeRouteScreen> {
                               ],
                             ),
                             Positioned(left: 10, bottom: 10, child: _Legend()),
+                            if (loadingZones)
+                              const Positioned(
+                                right: 10,
+                                top: 10,
+                                child: _ScoringChip(),
+                              ),
                           ],
                         ),
                 ),
@@ -150,7 +160,7 @@ class _SafeRouteScreenState extends State<SafeRouteScreen> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Based on time of day, lighting, and community reports.',
+                            'Based on live police-station and street-lamp density nearby (OpenStreetMap), adjusted for time of day.',
                             style: AppTextStyles.b5.copyWith(
                               color: AppColors.neutral400,
                             ),
@@ -169,6 +179,33 @@ class _SafeRouteScreenState extends State<SafeRouteScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ScoringChip extends StatelessWidget {
+  const _ScoringChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+          ),
+          const SizedBox(width: 6),
+          Text('Scoring zones...', style: AppTextStyles.b5),
+        ],
       ),
     );
   }

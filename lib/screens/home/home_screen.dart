@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../services/voice_command_service.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../history/history_tab.dart';
 import '../profile/profile_tab.dart';
+import '../sos/sos_screen.dart';
 import '../tracking/live_tracking_tab.dart';
 import 'home_tab.dart';
 
@@ -22,6 +24,31 @@ class _HomeScreenState extends State<HomeScreen> {
     const HistoryTab(),
     const ProfileTab(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Voice Command needs somewhere to push the SOS screen from regardless
+    // of which tab is currently showing — this outlives tab switches for
+    // as long as HomeScreen itself is mounted (i.e. the whole logged-in
+    // session), matching "foreground only" for the rest of this feature.
+    VoiceCommandService.registerTrigger(_triggerSosFromVoice);
+    VoiceCommandService.syncWithSetting();
+  }
+
+  @override
+  void dispose() {
+    VoiceCommandService.registerTrigger(null);
+    VoiceCommandService.stop();
+    super.dispose();
+  }
+
+  void _triggerSosFromVoice() {
+    if (!mounted) return;
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const SosScreen(autoTrigger: true)));
+  }
 
   void _shareLocationFromHome() {
     setState(() => _tab = SafeHerTab.tracking);

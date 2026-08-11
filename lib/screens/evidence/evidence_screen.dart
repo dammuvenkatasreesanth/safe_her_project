@@ -33,9 +33,9 @@ extension on Recording {
       ][m - 1];
 }
 
-/// Module 7 — lists real recordings from Firestore/Storage (see
-/// EvidenceService). Empty until capture is wired up with camera/record
-/// plugins; the SOS screen already links here so the entry point exists.
+/// Module 7 — lists evidence recordings captured on this device. Audio is
+/// auto-recorded when an SOS alert is triggered (see sos_screen.dart) and
+/// saved straight to local storage — never uploaded anywhere.
 class EvidenceScreen extends StatelessWidget {
   const EvidenceScreen({super.key});
 
@@ -53,7 +53,10 @@ class EvidenceScreen extends StatelessWidget {
               const SizedBox(height: 4),
               Padding(
                 padding: const EdgeInsets.only(left: 4),
-                child: Text('Auto-saved recordings from SOS alerts and reports', style: AppTextStyles.b3),
+                child: Text(
+                  'Audio recorded during SOS alerts — saved only on this device.',
+                  style: AppTextStyles.b3,
+                ),
               ),
               const SizedBox(height: 16),
               Expanded(
@@ -63,7 +66,7 @@ class EvidenceScreen extends StatelessWidget {
                     if (snapshot.hasError) {
                       return Center(
                         child: Text(
-                          'Could not load your evidence. Check your connection.',
+                          'Could not load your evidence.',
                           textAlign: TextAlign.center,
                           style: AppTextStyles.b3,
                         ),
@@ -83,7 +86,7 @@ class EvidenceScreen extends StatelessWidget {
                               const Icon(Icons.folder_off_outlined, size: 40, color: AppColors.neutral400),
                               const SizedBox(height: 12),
                               Text(
-                                'No evidence yet. Recordings from your next SOS alert or report will show up here.',
+                                'No evidence yet. Recordings from your next SOS alert will show up here.',
                                 textAlign: TextAlign.center,
                                 style: AppTextStyles.b3.copyWith(color: AppColors.neutral400),
                               ),
@@ -112,6 +115,29 @@ class _EvidenceCard extends StatelessWidget {
   const _EvidenceCard({required this.entry});
 
   final Recording entry;
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete this recording?'),
+        content: const Text('This removes the audio file from your device permanently.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await EvidenceService.deleteRecording(entry);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -150,11 +176,16 @@ class _EvidenceCard extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.cloud_done_outlined, size: 13, color: Color(0xFF16A34A)),
+                const Icon(Icons.phone_android_rounded, size: 13, color: Color(0xFF16A34A)),
                 const SizedBox(width: 4),
-                Text('Synced', style: AppTextStyles.b5.copyWith(color: const Color(0xFF16A34A))),
+                Text('On this device', style: AppTextStyles.b5.copyWith(color: const Color(0xFF16A34A))),
               ],
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.neutral400),
+            onPressed: () => _confirmDelete(context),
+            tooltip: 'Delete',
           ),
         ],
       ),

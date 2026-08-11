@@ -4,8 +4,11 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../models/contact.dart';
+import '../../models/incident.dart';
 import '../../services/auth_service.dart';
+import '../../services/incident_service.dart';
 import '../../services/location_service.dart';
+import '../../services/settings_service.dart';
 import '../../services/share_service.dart';
 import '../../services/tracking_service.dart';
 import '../../services/contacts_service.dart';
@@ -36,11 +39,31 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
   List<String> _sharedWithUserIds = [];
   StreamSubscription? _locationStream;
 
+  // Real geofence + auto-safe-arrival monitoring — both only run while a
+  // location stream is actually active (sharing or on a journey), matching
+  // how the rest of this screen only tracks in the foreground.
+  LatLng? _geofenceCenter;
+  bool _geofenceBreached = false;
+  (double, double, String)? _homeLocation;
+  bool _autoSafeArrivalEnabled = false;
+  bool _arrivedHome = false;
+
   @override
   void initState() {
     super.initState();
     LocationService.getCurrentLocation().then((loc) {
       if (mounted) setState(() => _location = loc);
+    });
+    _loadSafetySettings();
+  }
+
+  Future<void> _loadSafetySettings() async {
+    final enabled = await SettingsService.getAutoSafeArrival();
+    final home = await SettingsService.getHomeLocation();
+    if (!mounted) return;
+    setState(() {
+      _autoSafeArrivalEnabled = enabled;
+      _homeLocation = home;
     });
   }
 
@@ -65,6 +88,8 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
 
   Future<void> _startJourney() async {
     if (_location == null) return;
+    await _loadSafetySettings(); // pick up any Accessibility-screen changes
+    if (!mounted) return;
     final plan = await showStartJourneySheet(context, _location!);
     if (plan != null && mounted) {
       final (ownerId, ownerName) = await _currentOwner();
@@ -83,6 +108,9 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
         _sessionId = sid;
         _sharedWithUserIds = registeredIds;
         _mode = _TrackingMode.onJourney;
+        _geofenceCenter = plan.from;
+        _geofenceBreached = false;
+        _arrivedHome = false;
       });
 
       _startLocationStreaming();
@@ -128,6 +156,7 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
             if (_sessionId != null) {
               TrackingService.updateLocation(_sessionId!, loc);
             }
+            _checkSafety(loc);
           },
           // Without this, a permission error (denied mid-journey, GPS
           // toggled off, etc.) kills the stream silently and live tracking
@@ -147,6 +176,7 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
 
   Future<void> _shareOnly() async {
     if (_location == null) return;
+    await _loadSafetySettings(); // pick up any Accessibility-screen changes
     final (ownerId, ownerName) = await _currentOwner();
     final sid = await TrackingService.startSession(
       ownerId: ownerId,
@@ -160,6 +190,9 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
       _sessionId = sid;
       _sharedWithUserIds = registeredIds;
       _mode = _TrackingMode.sharingOnly;
+      _geofenceCenter = _location;
+      _geofenceBreached = false;
+      _arrivedHome = false;
     });
 
     _startLocationStreaming();
@@ -175,7 +208,75 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
       _journey = null;
       _sessionId = null;
       _sharedWithUserIds = [];
+      _geofenceCenter = null;
+      _geofenceBreached = false;
+      _arrivedHome = false;
     });
+  }
+
+  /// Runs on every location update while a session is active: checks for a
+  /// geofence exit and, separately, arrival at the saved home location.
+  /// Both are one-shot per session (won't re-fire once triggered) and only
+  /// run in the foreground — there's no background service in this app.
+  void _checkSafety(LatLng loc) {
+    if (_geofenceEnabled && !_geofenceBreached && _geofenceCenter != null) {
+      final distance = Geolocator.distanceBetween(
+        _geofenceCenter!.latitude,
+        _geofenceCenter!.longitude,
+        loc.latitude,
+        loc.longitude,
+      );
+      if (distance > _geofenceRadius) {
+        _geofenceBreached = true;
+        _onGeofenceBreach(loc, distance);
+      }
+    }
+
+    if (_autoSafeArrivalEnabled && !_arrivedHome && _homeLocation != null) {
+      final (homeLat, homeLng, homeLabel) = _homeLocation!;
+      final distance = Geolocator.distanceBetween(
+        homeLat,
+        homeLng,
+        loc.latitude,
+        loc.longitude,
+      );
+      if (distance < 150) {
+        _arrivedHome = true;
+        _onSafeArrival(loc, homeLabel);
+      }
+    }
+  }
+
+  void _onGeofenceBreach(LatLng loc, double distanceMeters) {
+    IncidentService.submitSafetyEvent(
+      title: 'Left Safe Zone',
+      subtitle: '${distanceMeters.round()}m outside the ${_geofenceRadius.round()}m safe zone',
+      status: IncidentStatus.emergency,
+      locationLatLng: loc,
+    ).catchError((_) => '');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("You've left your safe zone — your live location is still being shared."),
+          backgroundColor: Color(0xFFDC2626),
+        ),
+      );
+    }
+  }
+
+  void _onSafeArrival(LatLng loc, String homeLabel) {
+    IncidentService.submitSafetyEvent(
+      title: 'Arrived Home Safely',
+      subtitle: 'Auto-detected arrival near $homeLabel',
+      status: IncidentStatus.resolved,
+      locationLatLng: loc,
+    ).catchError((_) => '');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Welcome home! We've let your contacts know you're safe.")),
+      );
+    }
+    _stop();
   }
 
   String _buildShareMessage() {
@@ -265,6 +366,7 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
               location: _location,
               geofenceEnabled: _geofenceEnabled,
               geofenceRadius: _geofenceRadius,
+              geofenceCenter: _geofenceCenter,
               onShare: _shareOnly,
               onStartJourney: _startJourney,
             ),
@@ -272,6 +374,7 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
               location: _location,
               geofenceEnabled: _geofenceEnabled,
               geofenceRadius: _geofenceRadius,
+              geofenceCenter: _geofenceCenter,
               sharedWithUserIds: _sharedWithUserIds,
               onStop: _stop,
               onShare: () => _openShareSheet(),
@@ -283,6 +386,7 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
               speedKmh: _speedKmh,
               geofenceEnabled: _geofenceEnabled,
               geofenceRadius: _geofenceRadius,
+              geofenceCenter: _geofenceCenter,
               sharedWithUserIds: _sharedWithUserIds,
               onStop: _stop,
               onShare: () => _openShareSheet(),
@@ -293,7 +397,16 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
           _GeofenceCard(
             enabled: _geofenceEnabled,
             radius: _geofenceRadius,
-            onToggle: (v) => setState(() => _geofenceEnabled = v),
+            onToggle: (v) => setState(() {
+              _geofenceEnabled = v;
+              // Turned on mid-session (sharing/journey already running) —
+              // anchor the zone here and now instead of waiting for the
+              // next session, otherwise it'd never get a center at all.
+              if (v && _mode != _TrackingMode.idle && _geofenceCenter == null) {
+                _geofenceCenter = _location;
+                _geofenceBreached = false;
+              }
+            }),
             onRadiusChanged: (v) => setState(() => _geofenceRadius = v),
           ),
         ],
@@ -309,6 +422,7 @@ class _IdleState extends StatelessWidget {
     required this.location,
     required this.geofenceEnabled,
     required this.geofenceRadius,
+    required this.geofenceCenter,
   });
 
   final VoidCallback onShare;
@@ -316,6 +430,7 @@ class _IdleState extends StatelessWidget {
   final LatLng? location;
   final bool geofenceEnabled;
   final double geofenceRadius;
+  final LatLng? geofenceCenter;
 
   @override
   Widget build(BuildContext context) {
@@ -344,7 +459,9 @@ class _IdleState extends StatelessWidget {
                       circles: geofenceEnabled
                           ? [
                               CircleMarker(
-                                point: location!,
+                                // No session running yet — preview the
+                                // radius around the current position.
+                                point: geofenceCenter ?? location!,
                                 radius: geofenceRadius,
                                 useRadiusInMeter: true,
                                 color: AppColors.primary.withValues(
@@ -388,6 +505,7 @@ class _SharingOnlyState extends StatelessWidget {
     required this.location,
     required this.geofenceEnabled,
     required this.geofenceRadius,
+    required this.geofenceCenter,
     required this.sharedWithUserIds,
   });
 
@@ -397,6 +515,7 @@ class _SharingOnlyState extends StatelessWidget {
   final LatLng? location;
   final bool geofenceEnabled;
   final double geofenceRadius;
+  final LatLng? geofenceCenter;
   final List<String> sharedWithUserIds;
 
   @override
@@ -428,7 +547,7 @@ class _SharingOnlyState extends StatelessWidget {
                           circles: geofenceEnabled
                               ? [
                                   CircleMarker(
-                                    point: location!,
+                                    point: geofenceCenter ?? location!,
                                     radius: geofenceRadius,
                                     useRadiusInMeter: true,
                                     color: AppColors.primary.withValues(
@@ -507,6 +626,7 @@ class _JourneyState extends StatelessWidget {
     required this.onShowSharingStatus,
     required this.geofenceEnabled,
     required this.geofenceRadius,
+    required this.geofenceCenter,
     required this.sharedWithUserIds,
   });
 
@@ -518,6 +638,7 @@ class _JourneyState extends StatelessWidget {
   final VoidCallback onShowSharingStatus;
   final bool geofenceEnabled;
   final double geofenceRadius;
+  final LatLng? geofenceCenter;
   final List<String> sharedWithUserIds;
 
   @override
@@ -591,7 +712,7 @@ class _JourneyState extends StatelessWidget {
                         CircleLayer(
                           circles: [
                             CircleMarker(
-                              point: journey.from,
+                              point: geofenceCenter ?? journey.from,
                               radius: geofenceRadius,
                               useRadiusInMeter: true,
                               color: AppColors.primary.withValues(alpha: 0.10),

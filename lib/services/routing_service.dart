@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+import 'safety_score_service.dart';
 
 /// A single candidate road route between two points.
 class RouteOption {
@@ -9,6 +10,7 @@ class RouteOption {
     required this.points,
     required this.distanceKm,
     required this.durationMin,
+    this.safetyLevel,
   });
 
   final String label; // 'Fastest Route', 'Alternate Route 1', ...
@@ -16,9 +18,19 @@ class RouteOption {
   final double distanceKm;
   final int durationMin;
 
-  // TODO(module-5 safe-route): once Module 5 exposes real risk-zone
-  // scoring, add a safetyScore/riskLevel field here and surface it in
-  // select_route_screen.dart instead of the generic labels below.
+  // Filled in asynchronously after the route itself loads (see
+  // select_route_screen.dart) via SafetyScoreService — real OSM-derived
+  // police/lighting density along the route, not a mock label. Null until
+  // that fetch resolves.
+  final RiskLevel? safetyLevel;
+
+  RouteOption copyWith({RiskLevel? safetyLevel}) => RouteOption(
+    label: label,
+    points: points,
+    distanceKm: distanceKm,
+    durationMin: durationMin,
+    safetyLevel: safetyLevel ?? this.safetyLevel,
+  );
 }
 
 /// Free, keyless road routing via OSRM's public demo server.
