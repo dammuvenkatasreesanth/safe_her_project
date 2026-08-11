@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/contact.dart';
 import '../../providers/contact_provider.dart';
+import '../../services/device_contacts_service.dart';
+import '../../services/share_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_text_field.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/screen_header.dart';
+import 'contact_picker_screen.dart';
 
 class ContactsScreen extends StatefulWidget {
   const ContactsScreen({super.key});
@@ -173,6 +176,58 @@ class _ContactsScreenState extends State<ContactsScreen> {
     );
   }
 
+  Future<void> _importFromContacts() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.r5)),
+        title: const Text('Sync your contacts?'),
+        content: const Text(
+          "We'll ask permission to read your phone contacts so you can pick who to alert "
+          "during an SOS. Only the contacts you choose to add are saved to your account.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Not now'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    if (_provider.hasReachedLimit) return;
+
+    final picked = await Navigator.of(context).push<List<DeviceContact>>(
+      MaterialPageRoute(builder: (_) => ContactPickerScreen(maxSelectable: _provider.remainingSlots)),
+    );
+    if (picked == null || picked.isEmpty || !mounted) return;
+
+    var added = 0;
+    String? lastError;
+    for (final c in picked) {
+      final error = await _provider.addContact(name: c.name, phone: c.phone);
+      if (error == null) {
+        added++;
+      } else {
+        lastError = error;
+      }
+      if (!mounted) return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          added == 0
+              ? (lastError ?? 'No contacts were added.')
+              : 'Added $added contact${added == 1 ? '' : 's'}.',
+        ),
+      ),
+    );
+  }
+
   Future<void> _confirmDelete(Contact contact) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -321,6 +376,16 @@ class _ContactsScreenState extends State<ContactsScreen> {
                                     ? null
                                     : () => _openContactSheet(),
                               ),
+                              if (!provider.hasReachedLimit) ...[
+                                const SizedBox(height: 10),
+                                Center(
+                                  child: TextButton.icon(
+                                    onPressed: _importFromContacts,
+                                    icon: const Icon(Icons.contacts_outlined, size: 18),
+                                    label: const Text('Import from Contacts'),
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 28),
                               Text(
                                 'Emergency Helplines',
@@ -499,22 +564,35 @@ class _HelplineCard extends StatelessWidget {
   final String label;
   final String number;
 
+  Future<void> _call(BuildContext context) async {
+    final ok = await ShareService.callNumber(number);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't open the phone dialer.")),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.neutral300),
-        borderRadius: BorderRadius.circular(AppRadius.r4),
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.local_phone_rounded, size: 18),
-          const SizedBox(height: 6),
-          Text(label, style: AppTextStyles.b4, textAlign: TextAlign.center),
-          const SizedBox(height: 2),
-          Text(number, style: AppTextStyles.semibold16),
-        ],
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppRadius.r4),
+      onTap: () => _call(context),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.neutral300),
+          borderRadius: BorderRadius.circular(AppRadius.r4),
+        ),
+        child: Column(
+          children: [
+            const Icon(Icons.local_phone_rounded, size: 18),
+            const SizedBox(height: 6),
+            Text(label, style: AppTextStyles.b4, textAlign: TextAlign.center),
+            const SizedBox(height: 2),
+            Text(number, style: AppTextStyles.semibold16),
+          ],
+        ),
       ),
     );
   }

@@ -48,6 +48,19 @@ class ShareService {
     }
   }
 
+  /// Opens the phone dialer with [phone] pre-filled and initiates the call
+  /// — used by the SOS screen's direct-call actions (Police/Ambulance/
+  /// contacts). Returns false (instead of throwing) if the dialer couldn't
+  /// be opened.
+  static Future<bool> callNumber(String phone) async {
+    final uri = Uri(scheme: 'tel', path: phone.trim());
+    try {
+      return await launchUrl(uri);
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// True when the device has no network path at all (airplane mode, no
   /// signal, wifi/data both off) — the condition the "SMS Fallback" setting
   /// cares about, since SMS doesn't need data connectivity to send.

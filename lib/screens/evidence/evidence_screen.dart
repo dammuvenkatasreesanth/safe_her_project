@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../models/recording.dart';
+import '../../services/biometric_service.dart';
 import '../../services/evidence_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/screen_header.dart';
+import 'evidence_viewer_screen.dart';
 
 extension on Recording {
   IconData get icon => switch (type) {
@@ -33,11 +35,85 @@ extension on Recording {
       ][m - 1];
 }
 
-/// Module 7 — lists evidence recordings captured on this device. Audio is
-/// auto-recorded when an SOS alert is triggered (see sos_screen.dart) and
-/// saved straight to local storage — never uploaded anywhere.
-class EvidenceScreen extends StatelessWidget {
+/// Module 7 — lists encrypted evidence captured on this device. Audio
+/// auto-records during an SOS alert (see sos_screen.dart); photo/video/
+/// audio can also be captured manually from here. Everything is
+/// AES-encrypted at rest (EncryptionService) and never uploaded anywhere;
+/// viewing an entry requires the device's biometric/PIN lock.
+class EvidenceScreen extends StatefulWidget {
   const EvidenceScreen({super.key});
+
+  @override
+  State<EvidenceScreen> createState() => _EvidenceScreenState();
+}
+
+class _EvidenceScreenState extends State<EvidenceScreen> {
+  bool _recordingAudio = false;
+  bool _busy = false;
+
+  Future<void> _toggleAudio() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    if (_recordingAudio) {
+      final saved = await EvidenceService.stopRecording();
+      if (!mounted) return;
+      setState(() {
+        _recordingAudio = false;
+        _busy = false;
+      });
+      if (saved == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't save the recording.")),
+        );
+      }
+    } else {
+      final started = await EvidenceService.startRecording();
+      if (!mounted) return;
+      setState(() {
+        _recordingAudio = started;
+        _busy = false;
+      });
+      if (!started) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Microphone permission is needed to record audio.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _capturePhoto() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final saved = await EvidenceService.captureImage();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (saved == null) return; // user cancelled — nothing to report
+  }
+
+  Future<void> _captureVideo() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final saved = await EvidenceService.captureVideo();
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (saved == null) return; // user cancelled — nothing to report
+  }
+
+  Future<void> _open(Recording entry) async {
+    final canAuth = await BiometricService.canAuthenticate();
+    if (canAuth) {
+      final ok = await BiometricService.authenticate(
+        reason: 'Unlock to view this evidence',
+      );
+      if (!ok) return;
+    }
+    if (!mounted) return;
+    final file = await EvidenceService.decryptForViewing(entry);
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => EvidenceViewerScreen(recording: entry, file: file)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,9 +130,38 @@ class EvidenceScreen extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(left: 4),
                 child: Text(
-                  'Audio recorded during SOS alerts — saved only on this device.',
+                  'Encrypted on this device — unlock with your phone lock to view.',
                   style: AppTextStyles.b3,
                 ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: _CaptureButton(
+                      icon: _recordingAudio ? Icons.stop_circle_rounded : Icons.mic_none_rounded,
+                      label: _recordingAudio ? 'Stop' : 'Audio',
+                      active: _recordingAudio,
+                      onTap: _busy ? null : _toggleAudio,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _CaptureButton(
+                      icon: Icons.photo_camera_outlined,
+                      label: 'Photo',
+                      onTap: (_busy || _recordingAudio) ? null : _capturePhoto,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _CaptureButton(
+                      icon: Icons.videocam_outlined,
+                      label: 'Video',
+                      onTap: (_busy || _recordingAudio) ? null : _captureVideo,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               Expanded(
@@ -86,7 +191,8 @@ class EvidenceScreen extends StatelessWidget {
                               const Icon(Icons.folder_off_outlined, size: 40, color: AppColors.neutral400),
                               const SizedBox(height: 12),
                               Text(
-                                'No evidence yet. Recordings from your next SOS alert will show up here.',
+                                'No evidence yet. Capture audio, a photo, or video above — '
+                                'or it will auto-save when your next SOS alert fires.',
                                 textAlign: TextAlign.center,
                                 style: AppTextStyles.b3.copyWith(color: AppColors.neutral400),
                               ),
@@ -98,7 +204,10 @@ class EvidenceScreen extends StatelessWidget {
                     return ListView.separated(
                       itemCount: entries.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 11),
-                      itemBuilder: (context, i) => _EvidenceCard(entry: entries[i]),
+                      itemBuilder: (context, i) => _EvidenceCard(
+                        entry: entries[i],
+                        onTap: () => _open(entries[i]),
+                      ),
                     );
                   },
                 ),
@@ -111,83 +220,102 @@ class EvidenceScreen extends StatelessWidget {
   }
 }
 
-class _EvidenceCard extends StatelessWidget {
-  const _EvidenceCard({required this.entry});
+class _CaptureButton extends StatelessWidget {
+  const _CaptureButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.active = false,
+  });
 
-  final Recording entry;
-
-  Future<void> _confirmDelete(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete this recording?'),
-        content: const Text('This removes the audio file from your device permanently.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      await EvidenceService.deleteRecording(entry);
-    }
-  }
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final bool active;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.neutral300),
-        borderRadius: BorderRadius.circular(AppRadius.r4),
+    final disabled = onTap == null;
+    final color = active
+        ? const Color(0xFFE0334D)
+        : disabled
+        ? AppColors.neutral400
+        : AppColors.primary;
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppRadius.r4),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          border: Border.all(color: active ? color : AppColors.neutral300),
+          borderRadius: BorderRadius.circular(AppRadius.r4),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 20, color: color),
+            const SizedBox(height: 4),
+            Text(label, style: AppTextStyles.b5.copyWith(color: color)),
+          ],
+        ),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
-            alignment: Alignment.center,
-            child: Icon(entry.icon, size: 20, color: AppColors.primary),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(entry.title, style: AppTextStyles.semibold16, maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 3),
-                Text('${entry.formattedDate} · ${entry.formattedDuration}', style: AppTextStyles.b5),
-              ],
+    );
+  }
+}
+
+class _EvidenceCard extends StatelessWidget {
+  const _EvidenceCard({required this.entry, required this.onTap});
+
+  final Recording entry;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.r4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.neutral300),
+          borderRadius: BorderRadius.circular(AppRadius.r4),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+              alignment: Alignment.center,
+              child: Icon(entry.icon, size: 20, color: AppColors.primary),
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFF16A34A).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(entry.title, style: AppTextStyles.semibold16, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 3),
+                  Text('${entry.formattedDate} · ${entry.formattedDuration}', style: AppTextStyles.b5),
+                ],
+              ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.phone_android_rounded, size: 13, color: Color(0xFF16A34A)),
-                const SizedBox(width: 4),
-                Text('On this device', style: AppTextStyles.b5.copyWith(color: const Color(0xFF16A34A))),
-              ],
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF16A34A).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.lock_outline_rounded, size: 13, color: Color(0xFF16A34A)),
+                  const SizedBox(width: 4),
+                  Text('Encrypted', style: AppTextStyles.b5.copyWith(color: const Color(0xFF16A34A))),
+                ],
+              ),
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.neutral400),
-            onPressed: () => _confirmDelete(context),
-            tooltip: 'Delete',
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

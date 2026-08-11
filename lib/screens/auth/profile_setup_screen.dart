@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../models/user_profile.dart';
+import '../../repositories/contacts_repository.dart';
 import '../../services/auth_service.dart';
+import '../../services/device_contacts_service.dart';
 import '../../services/user_repository.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_text_field.dart';
 import '../../widgets/primary_button.dart';
+import '../contacts/contact_picker_screen.dart';
 import '../home/home_screen.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
@@ -18,8 +21,70 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _nameController = TextEditingController();
   String? _bloodGroup;
   bool _saving = false;
+  bool _importingContacts = false;
+  int _contactsAdded = 0;
 
   static const _bloodGroups = ['A+', 'B+', 'O+', 'AB+'];
+
+  Future<void> _addFromContacts() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.r5)),
+        title: const Text('Sync your contacts?'),
+        content: const Text(
+          "We'll ask permission to read your phone contacts so you can pick who to alert "
+          "during an SOS. Only the contacts you choose to add are saved to your account.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Not now'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final remaining = ContactsRepository.maxContacts - _contactsAdded;
+    if (remaining <= 0) return;
+
+    final picked = await Navigator.of(context).push<List<DeviceContact>>(
+      MaterialPageRoute(builder: (_) => ContactPickerScreen(maxSelectable: remaining)),
+    );
+    if (picked == null || picked.isEmpty || !mounted) return;
+
+    setState(() => _importingContacts = true);
+    final uid = AuthService.currentUser?.uid;
+    var added = 0;
+    if (uid != null) {
+      final repo = ContactsRepository();
+      for (final c in picked) {
+        try {
+          await repo.addContact(uid: uid, name: c.name, phone: c.phone);
+          added++;
+        } catch (_) {
+          // Duplicate/cap errors — skip this one and keep going with the rest.
+        }
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _importingContacts = false;
+      _contactsAdded += added;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          added == 0 ? 'No contacts were added.' : 'Added $added contact${added == 1 ? '' : 's'}.',
+        ),
+      ),
+    );
+  }
 
   Future<void> _finish({required bool markComplete}) async {
     final uid = AuthService.currentUser?.uid;
@@ -114,15 +179,28 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
               const SizedBox(height: 23),
               Text('Primary Emergency Contact', style: AppTextStyles.b2),
               const SizedBox(height: 15),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.neutral300),
-                  borderRadius: BorderRadius.circular(9),
+              InkWell(
+                borderRadius: BorderRadius.circular(9),
+                onTap: (_importingContacts || _contactsAdded >= ContactsRepository.maxContacts)
+                    ? null
+                    : _addFromContacts,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.neutral300),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Text(
+                    _importingContacts
+                        ? 'IMPORTING...'
+                        : _contactsAdded > 0
+                        ? '+  ADD MORE ($_contactsAdded ADDED)'
+                        : '+  ADD FROM CONTACTS',
+                    style: AppTextStyles.b2,
+                  ),
                 ),
-                child: Text('+  ADD FROM CONTACTS', style: AppTextStyles.b2),
               ),
               const SizedBox(height: 34),
               PrimaryButton(

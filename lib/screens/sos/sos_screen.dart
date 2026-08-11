@@ -741,11 +741,11 @@ class _SentViewState extends State<_SentView>
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(
+              const Expanded(
                 child: _EmergencyCallButton(label: 'Police', number: '100'),
               ),
               const SizedBox(width: 11),
-              Expanded(
+              const Expanded(
                 child: _EmergencyCallButton(label: 'Ambulance', number: '108'),
               ),
             ],
@@ -841,6 +841,7 @@ class _DeliveryTile extends StatefulWidget {
 }
 
 class _DeliveryTileState extends State<_DeliveryTile> {
+  bool _calling = false;
   bool _whatsAppOpened = false;
   bool _whatsAppSending = false;
   bool _smsOpened = false;
@@ -850,6 +851,19 @@ class _DeliveryTileState extends State<_DeliveryTile> {
     widget.location!,
     note: 'SOS! I need help.',
   );
+
+  Future<void> _call() async {
+    if (_calling) return;
+    setState(() => _calling = true);
+    final ok = await ShareService.callNumber(widget.contact.phone);
+    if (!mounted) return;
+    setState(() => _calling = false);
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't open the phone dialer.")),
+      );
+    }
+  }
 
   Future<void> _openWhatsApp() async {
     if (widget.location == null || _whatsAppSending) return;
@@ -898,7 +912,38 @@ class _DeliveryTileState extends State<_DeliveryTile> {
         children: [
           Row(
             children: [
-              Text(widget.contact.name, style: AppTextStyles.semibold16),
+              Expanded(
+                child: Text(
+                  widget.contact.name,
+                  style: AppTextStyles.semibold16,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: _calling ? null : _call,
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: const BoxDecoration(
+                    color: AppColors.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: _calling
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.call_rounded, color: Colors.white, size: 15),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
               const Spacer(),
               _DeliveryAction(
                 opened: _whatsAppOpened,
@@ -996,21 +1041,34 @@ class _EmergencyCallButton extends StatelessWidget {
   final String label;
   final String number;
 
+  Future<void> _call(BuildContext context) async {
+    final ok = await ShareService.callNumber(number);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't open the phone dialer.")),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.neutral300),
-        borderRadius: BorderRadius.circular(AppRadius.r4),
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.call_rounded, size: 20),
-          const SizedBox(height: 6),
-          Text(label, style: AppTextStyles.semibold16),
-          Text(number, style: AppTextStyles.b5),
-        ],
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppRadius.r4),
+      onTap: () => _call(context),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.neutral300),
+          borderRadius: BorderRadius.circular(AppRadius.r4),
+        ),
+        child: Column(
+          children: [
+            const Icon(Icons.call_rounded, size: 20),
+            const SizedBox(height: 6),
+            Text(label, style: AppTextStyles.semibold16),
+            Text(number, style: AppTextStyles.b5),
+          ],
+        ),
       ),
     );
   }

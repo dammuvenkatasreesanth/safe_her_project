@@ -30,6 +30,14 @@
 	<string>SafeHer uses your location to show it on the map, find nearby help, and share it with your trusted contacts during an SOS alert.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>SafeHer uses your location to track your journey and alert your trusted contacts if you leave a safe zone.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>SafeHer records audio evidence during SOS alerts to help document what happened.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>SafeHer lets you capture photo and video evidence for incident reports.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>SafeHer can import contacts from your address book so you can quickly choose your emergency contacts.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>SafeHer uses Face ID to confirm it's you before showing your saved evidence.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
