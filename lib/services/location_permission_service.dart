@@ -6,6 +6,11 @@ enum LocationAccessStatus {
   gpsDisabled,
   denied,
   deniedForever,
+  /// Permission is granted and GPS is on, but a real fix still couldn't be
+  /// obtained (weak signal, indoors, or a cold-start timeout). Distinct
+  /// from [denied]/[deniedForever] since re-requesting permission won't
+  /// help here — only moving somewhere with better signal or retrying will.
+  unavailable,
 }
 
 /// Reports *why* location isn't available, on top of the existing

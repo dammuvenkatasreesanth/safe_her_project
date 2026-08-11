@@ -38,7 +38,7 @@ class _HomeTabState extends State<HomeTab> {
     super.initState();
     LocationService.getCurrentLocation().then((loc) {
       if (mounted) setState(() => _location = loc);
-      _maybeReverseGeocode(loc);
+      if (loc != null) _maybeReverseGeocode(loc);
     });
     _startLocationStream();
   }

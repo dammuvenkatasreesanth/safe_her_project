@@ -37,11 +37,17 @@ class _ReportScreenState extends State<ReportScreen> {
 
   Future<void> _loadLocation() async {
     final point = await LocationService.getCurrentLocation();
-    final label = await GeocodingService.reverse(point);
+    String label;
+    if (point == null) {
+      label = 'Location unavailable';
+    } else {
+      label = await GeocodingService.reverse(point) ??
+          '${point.latitude.toStringAsFixed(4)}, ${point.longitude.toStringAsFixed(4)}';
+    }
     if (!mounted) return;
     setState(() {
       _location = point;
-      _locationLabel = label ?? 'Dhanmondi 32, Dhaka';
+      _locationLabel = label;
       _locating = false;
     });
   }

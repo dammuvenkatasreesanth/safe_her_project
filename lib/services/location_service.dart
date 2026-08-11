@@ -1,27 +1,35 @@
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
-/// Dhanmondi 32, Dhaka — used whenever we can't get a real device fix
-/// (permission denied, desktop/web without geolocation, or timeout).
-const LatLng defaultLocation = LatLng(23.7461, 90.3742);
-
 class LocationService {
   LocationService._();
 
-  static Future<LatLng> getCurrentLocation() async {
+  /// The device's real current location, or null if that's genuinely not
+  /// available right now (GPS off, permission denied, or no fix within the
+  /// timeout).
+  ///
+  /// This used to silently return a hardcoded fallback point (Dhanmondi,
+  /// Dhaka) whenever a real fix failed — every consumer of this (Nearby
+  /// Help results, SOS location sharing, Safe Route scoring, incident
+  /// tagging) is safety-relevant, and a wrong-but-plausible-looking
+  /// location (real place names shown as "2 km away" when the user is
+  /// actually thousands of km away) is worse than an honest "unavailable".
+  /// Callers must handle null explicitly — most already do, since they
+  /// show a loading/locating state until a location arrives.
+  static Future<LatLng?> getCurrentLocation() async {
     try {
       return await _resolve().timeout(
         const Duration(seconds: 20),
-        onTimeout: () => defaultLocation,
+        onTimeout: () => null,
       );
     } catch (_) {
-      return defaultLocation;
+      return null;
     }
   }
 
-  static Future<LatLng> _resolve() async {
+  static Future<LatLng?> _resolve() async {
     final enabled = await Geolocator.isLocationServiceEnabled();
-    if (!enabled) return defaultLocation;
+    if (!enabled) return null;
 
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
@@ -29,7 +37,7 @@ class LocationService {
     }
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
-      return defaultLocation;
+      return null;
     }
 
     try {

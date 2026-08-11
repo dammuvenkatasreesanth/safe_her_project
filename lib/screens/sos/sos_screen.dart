@@ -40,6 +40,11 @@ class _SosScreenState extends State<SosScreen> {
   Timer? _timer;
   LatLng? _location;
   String? _locationLabel;
+  // Distinguishes "still trying to get a fix" from "tried and genuinely
+  // couldn't" — an SOS alert must still go out either way, but the user
+  // (and _SentView) should know location may not be attached, rather than
+  // showing "Locating..." forever with no explanation.
+  bool _locationUnavailable = false;
 
   StreamSubscription<AccelerometerEvent>? _shakeSub;
   DateTime? _lastShakePulse;
@@ -58,6 +63,10 @@ class _SosScreenState extends State<SosScreen> {
     _contacts = ContactsService.contacts;
     LocationService.getCurrentLocation().then((loc) async {
       if (!mounted) return;
+      if (loc == null) {
+        setState(() => _locationUnavailable = true);
+        return;
+      }
       setState(() => _location = loc);
       final label = await GeocodingService.reverse(loc);
       if (mounted) setState(() => _locationLabel = label);
@@ -159,6 +168,7 @@ class _SosScreenState extends State<SosScreen> {
                       onTrigger: _startCountdown,
                       contacts: _contacts,
                       location: _location,
+                      locationUnavailable: _locationUnavailable,
                       shakeEnabled: !kIsWeb,
                     ),
                     _SosState.countingDown => _CountdownView(
@@ -189,12 +199,14 @@ class _IdleView extends StatefulWidget {
     required this.onTrigger,
     required this.contacts,
     required this.location,
+    required this.locationUnavailable,
     required this.shakeEnabled,
   });
 
   final VoidCallback onTrigger;
   final List<Contact> contacts;
   final LatLng? location;
+  final bool locationUnavailable;
   final bool shakeEnabled;
 
   @override
@@ -256,8 +268,12 @@ class _IdleViewState extends State<_IdleView> with TickerProviderStateMixin {
             children: [
               Expanded(
                 child: _StatusChip(
-                  icon: Icons.location_on_rounded,
-                  label: widget.location == null
+                  icon: widget.locationUnavailable
+                      ? Icons.location_off_rounded
+                      : Icons.location_on_rounded,
+                  label: widget.locationUnavailable
+                      ? 'Location unavailable'
+                      : widget.location == null
                       ? 'Locating...'
                       : 'Location Ready',
                   ok: widget.location != null,

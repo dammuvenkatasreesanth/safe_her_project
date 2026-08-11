@@ -119,6 +119,7 @@ class _NearbyHelpScreenState extends State<NearbyHelpScreen> {
                       _LocationBanner(
                         status: provider.locationStatus!,
                         onOpenSettings: provider.openLocationSettings,
+                        onRetry: provider.refresh,
                       )
                     else if ((provider.isUsingFallback || provider.isUsingCache) &&
                         !provider.isLoading)
@@ -126,8 +127,8 @@ class _NearbyHelpScreenState extends State<NearbyHelpScreen> {
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(
                           provider.isUsingCache
-                              ? 'Showing recently saved nearby locations (offline)'
-                              : 'Showing saved nearby locations (live data unavailable)',
+                              ? 'Showing recently saved nearby locations — may be out of date.'
+                              : "Live data unavailable — showing example locations that may not be near you.",
                           style: AppTextStyles.b5.copyWith(
                             color: AppColors.neutral400,
                           ),
@@ -171,11 +172,26 @@ class _NearbyHelpScreenState extends State<NearbyHelpScreen> {
                             )
                           : visible.isEmpty
                           ? Center(
-                              child: Text(
-                                provider.query.isNotEmpty
-                                    ? 'No places match "${provider.query}".'
-                                    : 'No places found nearby.',
-                                style: AppTextStyles.b3,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 24),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      provider.query.isNotEmpty
+                                          ? 'No places match "${provider.query}".'
+                                          : provider.location == null
+                                          ? "Couldn't get your location, so we can't show places near you."
+                                          : 'No places found nearby.',
+                                      textAlign: TextAlign.center,
+                                      style: AppTextStyles.b3,
+                                    ),
+                                    if (provider.query.isEmpty && provider.location == null) ...[
+                                      const SizedBox(height: 10),
+                                      TextButton(onPressed: provider.refresh, child: const Text('Retry')),
+                                    ],
+                                  ],
+                                ),
                               ),
                             )
                           : RefreshIndicator(
@@ -208,10 +224,15 @@ class _NearbyHelpScreenState extends State<NearbyHelpScreen> {
 }
 
 class _LocationBanner extends StatelessWidget {
-  const _LocationBanner({required this.status, required this.onOpenSettings});
+  const _LocationBanner({
+    required this.status,
+    required this.onOpenSettings,
+    required this.onRetry,
+  });
 
   final LocationAccessStatus status;
   final Future<void> Function() onOpenSettings;
+  final Future<void> Function() onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -219,12 +240,15 @@ class _LocationBanner extends StatelessWidget {
       LocationAccessStatus.gpsDisabled =>
         'Location services are off. Turn on GPS for accurate nearby results.',
       LocationAccessStatus.denied =>
-        'Location permission denied. Showing a default area instead.',
+        "Location permission denied — we can't show places near you without it.",
       LocationAccessStatus.deniedForever =>
         'Location permission is blocked. Enable it in Settings for accurate results.',
+      LocationAccessStatus.unavailable =>
+        "Couldn't get a GPS fix. Move to an open area or check your connection, then retry.",
       LocationAccessStatus.granted => '',
     };
-    final showAction = status == LocationAccessStatus.deniedForever;
+    final showSettings = status == LocationAccessStatus.deniedForever;
+    final showRetry = status == LocationAccessStatus.unavailable || status == LocationAccessStatus.gpsDisabled;
     return Padding(
       padding: const EdgeInsets.only(top: 6),
       child: Row(
@@ -237,7 +261,7 @@ class _LocationBanner extends StatelessWidget {
               style: AppTextStyles.b5.copyWith(color: AppColors.neutral400),
             ),
           ),
-          if (showAction)
+          if (showSettings)
             TextButton(
               onPressed: onOpenSettings,
               style: TextButton.styleFrom(
@@ -246,6 +270,16 @@ class _LocationBanner extends StatelessWidget {
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               child: Text('Settings', style: AppTextStyles.b5),
+            ),
+          if (showRetry)
+            TextButton(
+              onPressed: onRetry,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Text('Retry', style: AppTextStyles.b5),
             ),
         ],
       ),

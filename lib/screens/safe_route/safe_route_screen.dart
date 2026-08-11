@@ -38,15 +38,24 @@ class _RiskZone {
 class _SafeRouteScreenState extends State<SafeRouteScreen> {
   LatLng? _location;
   List<_RiskZone>? _zones;
+  bool _locationFailed = false;
 
   @override
   void initState() {
     super.initState();
-    LocationService.getCurrentLocation().then((loc) async {
-      if (!mounted) return;
-      setState(() => _location = loc);
-      await _loadZones(loc);
-    });
+    _loadLocation();
+  }
+
+  Future<void> _loadLocation() async {
+    setState(() => _locationFailed = false);
+    final loc = await LocationService.getCurrentLocation();
+    if (!mounted) return;
+    if (loc == null) {
+      setState(() => _locationFailed = true);
+      return;
+    }
+    setState(() => _location = loc);
+    await _loadZones(loc);
   }
 
   /// Four fixed points around the user, each scored for real via a live
@@ -91,7 +100,27 @@ class _SafeRouteScreenState extends State<SafeRouteScreen> {
                 child: SizedBox(
                   height: 320,
                   width: double.infinity,
-                  child: _location == null
+                  child: _locationFailed
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.location_off_rounded, size: 32, color: AppColors.neutral400),
+                                const SizedBox(height: 10),
+                                Text(
+                                  "Couldn't get your location. Check GPS is on and try again.",
+                                  textAlign: TextAlign.center,
+                                  style: AppTextStyles.b4.copyWith(color: AppColors.neutral400),
+                                ),
+                                const SizedBox(height: 10),
+                                TextButton(onPressed: _loadLocation, child: const Text('Retry')),
+                              ],
+                            ),
+                          ),
+                        )
+                      : _location == null
                       ? const Center(
                           child: CircularProgressIndicator(
                             color: AppColors.primary,

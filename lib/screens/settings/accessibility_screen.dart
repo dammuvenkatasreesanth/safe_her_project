@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import '../../services/geocoding_service.dart';
 import '../../services/location_service.dart';
 import '../../services/settings_service.dart';
@@ -43,12 +44,18 @@ class _AccessibilityScreenState extends State<AccessibilityScreen> {
     });
   }
 
+  // Only used to give the map picker somewhere to start if a real GPS fix
+  // isn't available — the user searches/drags to their actual home either
+  // way, so this doesn't need to be accurate (unlike Nearby Help/SOS/Safe
+  // Route, which must never substitute a fake location for a real one).
+  static const _fallbackMapCenter = LatLng(20.5937, 78.9629); // center of India
+
   Future<void> _setHomeLocation() async {
     final current = await LocationService.getCurrentLocation();
     if (!mounted) return;
     final result = await Navigator.of(context).push<PlaceResult>(
       MaterialPageRoute(
-        builder: (_) => PickLocationScreen(initialCenter: current),
+        builder: (_) => PickLocationScreen(initialCenter: current ?? _fallbackMapCenter),
       ),
     );
     if (result == null) return;

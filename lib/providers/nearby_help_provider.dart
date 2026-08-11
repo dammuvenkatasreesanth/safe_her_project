@@ -51,14 +51,25 @@ class NearbyHelpProvider extends ChangeNotifier {
     notifyListeners();
 
     final status = await LocationPermissionService.checkStatus();
-    _locationStatus = status;
 
-    // Even when permission is denied, LocationService.getCurrentLocation()
-    // still returns a usable default point (see its docstring), so we can
-    // always show *something* on the map — we just also surface why it
-    // isn't the user's real location via [locationStatus].
     final location = await LocationService.getCurrentLocation();
     _location = location;
+
+    if (location == null) {
+      // Permission can be fine (GPS just hasn't produced a fix yet) even
+      // though checkStatus() reported granted — don't show "Location
+      // Ready"-adjacent silence when we're about to display nothing real.
+      _locationStatus = status == LocationAccessStatus.granted
+          ? LocationAccessStatus.unavailable
+          : status;
+      _places = [];
+      _source = null;
+      _isLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    _locationStatus = status;
     notifyListeners();
 
     final result = await _repository.getNearby(location);

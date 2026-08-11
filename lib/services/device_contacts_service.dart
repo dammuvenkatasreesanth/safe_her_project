@@ -19,7 +19,15 @@ class DeviceContact {
 class DeviceContactsService {
   DeviceContactsService._();
 
-  static Future<bool> requestPermission() => FlutterContacts.requestPermission();
+  // readonly: true — we only ever read the address book (never write back
+  // to it), and matters concretely: flutter_contacts' default (readonly:
+  // false) requests READ_CONTACTS *and* WRITE_CONTACTS, and only reports
+  // success if both are granted. WRITE_CONTACTS isn't declared in the
+  // Android manifest (we don't need it), so the OS auto-denies that half
+  // of the request — meaning the default call here would report "denied"
+  // even after the user taps Allow on the real permission dialog.
+  static Future<bool> requestPermission() =>
+      FlutterContacts.requestPermission(readonly: true);
 
   /// Device contacts with at least one phone number, sorted by name.
   static Future<List<DeviceContact>> fetchContacts() async {
