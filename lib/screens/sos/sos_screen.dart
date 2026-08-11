@@ -107,8 +107,13 @@ class _SosScreenState extends State<SosScreen> {
           contactNames: _contacts.map((c) => c.name).toList(),
           locationLabel: _locationLabel,
           locationLatLng: _location,
-        ).then((id) => EvidenceService.startRecording(incidentId: id))
-            .catchError((_) => false);
+        ).then((id) {
+          // The user may have already tapped "I'm Safe Now" while this
+          // Firestore write was in flight — don't start a recording nobody
+          // will ever stop.
+          if (!mounted || _state != _SosState.sent) return Future.value(false);
+          return EvidenceService.startRecording(incidentId: id);
+        }).catchError((_) => false);
       } else {
         HapticFeedback.lightImpact();
         setState(() => _count--);

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
@@ -51,9 +52,15 @@ class SafetyScoreService {
     return _levelFor((totalPolice, totalLamps));
   }
 
-  static RiskLevel _levelFor((int police, int lamps) counts) {
-    var score = counts.$1 * 3 + counts.$2;
-    if (_isNight) score = (score * 0.6).round();
+  static RiskLevel _levelFor((int police, int lamps) counts) =>
+      levelForCounts(counts.$1, counts.$2, isNight: _isNight);
+
+  /// The scoring bucket itself, split out from [_levelFor] so it's
+  /// unit-testable without depending on the real wall-clock hour.
+  @visibleForTesting
+  static RiskLevel levelForCounts(int policeCount, int lampCount, {required bool isNight}) {
+    var score = policeCount * 3 + lampCount;
+    if (isNight) score = (score * 0.6).round();
     if (score >= 8) return RiskLevel.safe;
     if (score >= 3) return RiskLevel.moderate;
     return RiskLevel.high;

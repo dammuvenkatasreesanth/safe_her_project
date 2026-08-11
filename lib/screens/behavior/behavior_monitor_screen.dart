@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import '../../services/motion_classifier.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/screen_header.dart';
 
@@ -37,19 +38,10 @@ class _BehaviorMonitorScreenState extends State<BehaviorMonitorScreen> {
   StreamSubscription<AccelerometerEvent>? _sub;
   Timer? _statusResetTimer;
 
-  double? _lastMagnitude;
-  DateTime? _freefallStartedAt;
-  int _highMagnitudeStreak = 0;
+  final _classifier = MotionClassifier();
   DateTime? _lastLoggedAt;
   _MotionStatus? _lastLoggedStatus;
 
-  // Raw accelerometer magnitude includes gravity (~9.8 m/s^2 at rest).
-  static const _freefallThreshold = 3.0; // near-weightless dip
-  static const _impactThreshold = 25.0; // hard spike right after a dip
-  static const _freefallWindow = Duration(milliseconds: 800);
-  static const _runningThreshold = 16.0;
-  static const _runningSustainSamples = 6;
-  static const _suddenStopDelta = 12.0;
   static const _logCooldown = Duration(seconds: 5);
 
   @override
@@ -78,53 +70,23 @@ class _BehaviorMonitorScreenState extends State<BehaviorMonitorScreen> {
     _sub?.cancel();
     _sub = null;
     _statusResetTimer?.cancel();
-    _lastMagnitude = null;
-    _freefallStartedAt = null;
-    _highMagnitudeStreak = 0;
+    _classifier.reset();
     _status = _MotionStatus.normal;
   }
 
   void _onEvent(AccelerometerEvent event) {
     final magnitude = math.sqrt(event.x * event.x + event.y * event.y + event.z * event.z);
     final now = DateTime.now();
-
-    // Fall pattern: a brief near-weightless dip (device in free fall)
-    // followed shortly by a hard impact spike.
-    if (magnitude < _freefallThreshold) {
-      _freefallStartedAt ??= now;
-    } else {
-      if (_freefallStartedAt != null &&
-          now.difference(_freefallStartedAt!) < _freefallWindow &&
-          magnitude > _impactThreshold) {
-        _freefallStartedAt = null;
-        _lastMagnitude = magnitude;
-        _recordEvent(_MotionStatus.fall, 'Possible fall detected', _Severity.severe);
-        return;
-      }
-      if (_freefallStartedAt != null && now.difference(_freefallStartedAt!) >= _freefallWindow) {
-        _freefallStartedAt = null;
+    for (final motionEvent in _classifier.onSample(magnitude, now)) {
+      switch (motionEvent) {
+        case MotionEvent.fall:
+          _recordEvent(_MotionStatus.fall, 'Possible fall detected', _Severity.severe);
+        case MotionEvent.suddenStop:
+          _recordEvent(_MotionStatus.suddenStop, 'Sudden stop detected', _Severity.warning);
+        case MotionEvent.running:
+          _recordEvent(_MotionStatus.running, 'Running detected', _Severity.warning);
       }
     }
-
-    // Sudden stop: sharp deceleration from an already-elevated magnitude.
-    if (_lastMagnitude != null) {
-      final delta = _lastMagnitude! - magnitude;
-      if (_lastMagnitude! > _runningThreshold && delta > _suddenStopDelta) {
-        _recordEvent(_MotionStatus.suddenStop, 'Sudden stop detected', _Severity.warning);
-      }
-    }
-
-    // Running: sustained high magnitude over several consecutive samples.
-    if (magnitude > _runningThreshold) {
-      _highMagnitudeStreak++;
-      if (_highMagnitudeStreak == _runningSustainSamples) {
-        _recordEvent(_MotionStatus.running, 'Running detected', _Severity.warning);
-      }
-    } else {
-      _highMagnitudeStreak = 0;
-    }
-
-    _lastMagnitude = magnitude;
   }
 
   void _recordEvent(_MotionStatus status, String label, _Severity severity) {

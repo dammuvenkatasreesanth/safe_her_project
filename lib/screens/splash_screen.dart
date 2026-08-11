@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../services/auth_service.dart';
@@ -30,11 +31,16 @@ class _SplashScreenState extends State<SplashScreen>
     end: 1.0,
   ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutBack));
 
+  Timer? _routeTimer;
+
   @override
   void initState() {
     super.initState();
     _controller.forward();
-    Future.delayed(const Duration(milliseconds: 2000), _routeNext);
+    // A Timer (not a bare Future.delayed) so it can actually be cancelled
+    // in dispose() if the widget goes away before the splash delay elapses
+    // — e.g. hot restart, or a widget test tearing down the tree early.
+    _routeTimer = Timer(const Duration(milliseconds: 2000), _routeNext);
   }
 
   Future<void> _routeNext() async {
@@ -51,7 +57,7 @@ class _SplashScreenState extends State<SplashScreen>
       return;
     }
 
-    // Already signed in with a verified phone from a previous session — skip onboarding/auth entirely.
+    // Already signed in from a previous session — skip onboarding/auth entirely.
     final profile = await UserRepository.getProfile(user.uid);
     if (!mounted) return;
     Navigator.of(context).pushReplacement(
@@ -61,6 +67,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
+    _routeTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }

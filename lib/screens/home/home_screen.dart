@@ -17,6 +17,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   SafeHerTab _tab = SafeHerTab.home;
   final _trackingKey = GlobalKey<LiveTrackingTabState>();
+  bool _sosScreenActive = false;
 
   late final _tabs = [
     HomeTab(onShareLocation: _shareLocationFromHome),
@@ -44,10 +45,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _triggerSosFromVoice() {
-    if (!mounted) return;
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const SosScreen(autoTrigger: true)));
+    // A panicked "help me, help me" repeats the phrase — without this
+    // guard, each repeat would push another SosScreen on top of the last
+    // one instead of the countdown just running once.
+    if (!mounted || _sosScreenActive) return;
+    _sosScreenActive = true;
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const SosScreen(autoTrigger: true)))
+        .then((_) => _sosScreenActive = false);
   }
 
   void _shareLocationFromHome() {

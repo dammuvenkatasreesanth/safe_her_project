@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import '../../models/contact.dart';
 import '../../models/incident.dart';
 import '../../services/auth_service.dart';
+import '../../services/geofence_service.dart';
 import '../../services/incident_service.dart';
 import '../../services/location_service.dart';
 import '../../services/settings_service.dart';
@@ -220,27 +221,28 @@ class LiveTrackingTabState extends State<LiveTrackingTab> {
   /// run in the foreground — there's no background service in this app.
   void _checkSafety(LatLng loc) {
     if (_geofenceEnabled && !_geofenceBreached && _geofenceCenter != null) {
-      final distance = Geolocator.distanceBetween(
-        _geofenceCenter!.latitude,
-        _geofenceCenter!.longitude,
-        loc.latitude,
-        loc.longitude,
-      );
-      if (distance > _geofenceRadius) {
+      if (GeofenceEvaluator.hasExitedZone(
+        center: _geofenceCenter!,
+        current: loc,
+        radiusMeters: _geofenceRadius,
+      )) {
         _geofenceBreached = true;
+        final distance = Geolocator.distanceBetween(
+          _geofenceCenter!.latitude,
+          _geofenceCenter!.longitude,
+          loc.latitude,
+          loc.longitude,
+        );
         _onGeofenceBreach(loc, distance);
       }
     }
 
     if (_autoSafeArrivalEnabled && !_arrivedHome && _homeLocation != null) {
       final (homeLat, homeLng, homeLabel) = _homeLocation!;
-      final distance = Geolocator.distanceBetween(
-        homeLat,
-        homeLng,
-        loc.latitude,
-        loc.longitude,
-      );
-      if (distance < 150) {
+      if (GeofenceEvaluator.hasArrived(
+        home: LatLng(homeLat, homeLng),
+        current: loc,
+      )) {
         _arrivedHome = true;
         _onSafeArrival(loc, homeLabel);
       }
