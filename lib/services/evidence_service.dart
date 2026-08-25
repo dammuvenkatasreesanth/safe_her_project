@@ -199,6 +199,19 @@ class EvidenceService {
     return _controller.stream;
   }
 
+  /// Links an already-captured recording to an incident after the fact —
+  /// e.g. Report Incident captures a photo before the report exists (no
+  /// incident id yet), then calls this once submission returns the new
+  /// doc id. No-ops quietly if the recording was deleted in the meantime.
+  static Future<void> attachIncident(Recording recording, String incidentId) async {
+    final list = await _loadIndex();
+    final index = list.indexWhere((r) => r.id == recording.id);
+    if (index == -1) return;
+    final updated = List<Recording>.from(list);
+    updated[index] = updated[index].copyWith(incidentId: incidentId);
+    await _saveIndex(updated);
+  }
+
   /// Decrypts [recording] into a fresh temp file for viewing — call only
   /// after a successful BiometricService.authenticate(). The caller must
   /// pass the result to [cleanupDecrypted] once done viewing so the

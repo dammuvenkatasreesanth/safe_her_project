@@ -458,12 +458,16 @@ event from Modules 3 and 4 lands in the same timeline automatically.
   shipped with the end-user mobile app. That separate project simply
   hasn't been started yet by anyone on the team — it's a "not started,"
   not a "broken" or "incomplete" item within this codebase.
-- **Photo attachment upload for reports** — the Report screen has a
-  "has photo" flag in its data model but no actual upload path, for the
-  identical Blaze-plan Storage reasoning as Module 7. If the team wants
-  this, the local-encrypted-evidence pattern built for Module 7 could
-  plausibly be extended to cover report photos too, rather than needing a
-  new cloud-storage decision.
+
+Report screen photo attachment is now real: it was previously just a
+boolean toggle with no actual file behind it. It now reuses Module 7's
+existing local-encrypted-evidence pipeline directly — tapping "Add Photo"
+opens the camera via `EvidenceService.captureImage()`, the file is
+AES-256-GCM encrypted immediately, and the resulting `Recording` is linked
+to the submitted incident's id once the report succeeds
+(`EvidenceService.attachIncident`). Backing out of the screen without
+submitting deletes the captured-but-orphaned encrypted file rather than
+leaving it stranded in Evidence with nothing pointing to it.
 
 ---
 

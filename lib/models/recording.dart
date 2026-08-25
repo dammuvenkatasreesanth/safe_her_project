@@ -27,6 +27,20 @@ class Recording {
   /// to, if it was captured during an SOS alert or report.
   final String? incidentId;
 
+  /// Used to attach an incident id after the fact — e.g. Report Incident
+  /// captures the photo before the report is submitted (there's no
+  /// incident id yet at capture time), then links it once submission
+  /// returns the new doc id.
+  Recording copyWith({String? incidentId}) => Recording(
+    id: id,
+    type: type,
+    title: title,
+    localPath: localPath,
+    createdAt: createdAt,
+    durationSeconds: durationSeconds,
+    incidentId: incidentId ?? this.incidentId,
+  );
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'type': type.name,

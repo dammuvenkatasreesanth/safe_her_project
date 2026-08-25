@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+import '../../models/recording.dart';
+import '../../services/evidence_service.dart';
 import '../../services/geocoding_service.dart';
 import '../../services/incident_service.dart';
 import '../../services/location_service.dart';
@@ -20,7 +22,8 @@ class _ReportScreenState extends State<ReportScreen> {
   String? _type;
   bool _submitted = false;
   bool _submitting = false;
-  bool _photoAttached = false;
+  Recording? _attachedPhoto;
+  bool _capturingPhoto = false;
   String? _error;
 
   LatLng? _location;
@@ -52,6 +55,23 @@ class _ReportScreenState extends State<ReportScreen> {
     });
   }
 
+  Future<void> _togglePhoto() async {
+    if (_capturingPhoto) return;
+    final existing = _attachedPhoto;
+    if (existing != null) {
+      await EvidenceService.deleteRecording(existing);
+      if (mounted) setState(() => _attachedPhoto = null);
+      return;
+    }
+    setState(() => _capturingPhoto = true);
+    final captured = await EvidenceService.captureImage();
+    if (!mounted) return;
+    setState(() {
+      _capturingPhoto = false;
+      _attachedPhoto = captured;
+    });
+  }
+
   Future<void> _submit() async {
     if (_type == null || _submitting) return;
     setState(() {
@@ -59,13 +79,19 @@ class _ReportScreenState extends State<ReportScreen> {
       _error = null;
     });
     try {
-      await IncidentService.submitReport(
+      final incidentId = await IncidentService.submitReport(
         category: _type!,
         description: _descriptionController.text.trim(),
         locationLabel: _locationLabel,
         locationLatLng: _location,
-        hasPhoto: _photoAttached,
+        hasPhoto: _attachedPhoto != null,
       );
+      final photo = _attachedPhoto;
+      if (photo != null) {
+        // Best-effort link — the report itself already succeeded above,
+        // so a failure here shouldn't block the user from seeing success.
+        await EvidenceService.attachIncident(photo, incidentId).catchError((_) {});
+      }
       if (!mounted) return;
       setState(() {
         _submitting = false;
@@ -82,6 +108,12 @@ class _ReportScreenState extends State<ReportScreen> {
 
   @override
   void dispose() {
+    // A photo captured but never submitted (user backed out) shouldn't
+    // linger in Evidence with no incident to belong to.
+    final photo = _attachedPhoto;
+    if (!_submitted && photo != null) {
+      EvidenceService.deleteRecording(photo).catchError((_) {});
+    }
     _descriptionController.dispose();
     super.dispose();
   }
@@ -171,28 +203,39 @@ class _ReportScreenState extends State<ReportScreen> {
           Text('Evidence', style: AppTextStyles.b2),
           const SizedBox(height: 10),
           GestureDetector(
-            onTap: () => setState(() => _photoAttached = !_photoAttached),
+            onTap: _capturingPhoto ? null : _togglePhoto,
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 16),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                border: Border.all(color: AppColors.neutral300),
+                border: Border.all(
+                  color: _attachedPhoto != null ? AppColors.primary : AppColors.neutral300,
+                ),
                 borderRadius: BorderRadius.circular(AppRadius.r4),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    _photoAttached
-                        ? Icons.check_circle
-                        : Icons.add_a_photo_outlined,
-                    size: 18,
-                    color: _photoAttached ? AppColors.primary : AppColors.black,
-                  ),
+                  if (_capturingPhoto)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                    )
+                  else
+                    Icon(
+                      _attachedPhoto != null ? Icons.lock_outline_rounded : Icons.add_a_photo_outlined,
+                      size: 18,
+                      color: _attachedPhoto != null ? AppColors.primary : AppColors.black,
+                    ),
                   const SizedBox(width: 8),
                   Text(
-                    _photoAttached ? 'Photo Attached' : 'Add Photo (Optional)',
+                    _capturingPhoto
+                        ? 'Opening camera...'
+                        : _attachedPhoto != null
+                        ? 'Photo attached (encrypted) — tap to remove'
+                        : 'Add Photo (Optional)',
                     style: AppTextStyles.b3,
                   ),
                 ],
