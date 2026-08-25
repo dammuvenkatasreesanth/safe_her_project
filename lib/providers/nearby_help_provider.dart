@@ -42,7 +42,7 @@ class NearbyHelpProvider extends ChangeNotifier {
   bool get isRouteLoading => _routeLoading;
   bool get routeFailed => _routeFailed;
 
-  bool get isUsingFallback => _source == PlacesSource.offlineFallback;
+  bool get isUnavailable => _source == PlacesSource.unavailable;
   bool get isUsingCache => _source == PlacesSource.cache;
 
   List<Place> get visiblePlaces {

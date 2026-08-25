@@ -143,14 +143,11 @@ class _NearbyHelpScreenState extends State<NearbyHelpScreen> {
                         onOpenSettings: provider.openLocationSettings,
                         onRetry: provider.refresh,
                       )
-                    else if ((provider.isUsingFallback || provider.isUsingCache) &&
-                        !provider.isLoading)
+                    else if (provider.isUsingCache && !provider.isLoading)
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(
-                          provider.isUsingCache
-                              ? 'Showing recently saved nearby locations — may be out of date.'
-                              : "Live data unavailable — showing example locations that may not be near you.",
+                          'Showing recently saved nearby locations — may be out of date.',
                           style: AppTextStyles.b5.copyWith(
                             color: AppColors.neutral400,
                           ),
@@ -204,11 +201,14 @@ class _NearbyHelpScreenState extends State<NearbyHelpScreen> {
                                           ? 'No places match "${provider.query}".'
                                           : provider.location == null
                                           ? "Couldn't get your location, so we can't show places near you."
+                                          : provider.isUnavailable
+                                          ? "Couldn't reach live nearby-help data, and nothing is saved from last time yet."
                                           : 'No places found nearby.',
                                       textAlign: TextAlign.center,
                                       style: AppTextStyles.b3,
                                     ),
-                                    if (provider.query.isEmpty && provider.location == null) ...[
+                                    if (provider.query.isEmpty &&
+                                        (provider.location == null || provider.isUnavailable)) ...[
                                       const SizedBox(height: 10),
                                       TextButton(onPressed: provider.refresh, child: const Text('Retry')),
                                     ],
