@@ -130,16 +130,22 @@ NGOs on a map with one-tap calling and directions.
   static list.
 - **flutter_contacts** — the same device-contacts picker used in Module 1,
   reused here as "Import from Contacts" on the main Contacts screen.
-- **url_launcher** (`tel:` scheme, Google Maps directions link) — placing
-  calls and opening directions without needing any calling/mapping SDK of
-  our own.
+- **OSRM's public demo server** — Directions draws a real in-app route line
+  (distance + duration) to the selected place, reusing the same free,
+  keyless routing service built for Module 4, instead of only handing off
+  to an external maps app. An "Open in Maps" fallback still exists for
+  actual spoken turn-by-turn navigation, which an OSRM polyline alone
+  doesn't provide.
+- **url_launcher** (`tel:` scheme; the Maps fallback above) — placing calls
+  without needing any calling SDK of our own.
 
 **What's done:** Full contact CRUD with a 5-contact cap and duplicate-phone
 detection, a "primary contact" concept (alerted first during SOS), device-
 contact import on both the signup screen and the main Contacts screen, a
-real live map with real police/hospital/NGO pins, working Call and
-Directions buttons per place, and working Call buttons on the emergency
-helpline shortcuts (Police/Women's Helpline/Ambulance/Fire).
+real live map with real police/hospital/NGO pins, working Call buttons per
+place, in-app real-route Directions with an external-maps fallback, and
+working Call buttons on the emergency helpline shortcuts (Police/Women's
+Helpline/Ambulance/Fire).
 
 **What's missing and why:**
 - **Contact consent/verification** — nothing currently confirms with the

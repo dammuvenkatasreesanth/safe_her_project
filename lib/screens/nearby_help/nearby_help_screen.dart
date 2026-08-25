@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../models/place.dart';
 import '../../providers/nearby_help_provider.dart';
 import '../../services/location_permission_service.dart';
+import '../../services/routing_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_map.dart';
 import '../../widgets/app_text_field.dart';
@@ -57,7 +58,10 @@ class _NearbyHelpScreenState extends State<NearbyHelpScreen> {
     }
   }
 
-  Future<void> _openDirections(Place place) async {
+  /// External fallback for real turn-by-turn spoken navigation — the in-app
+  /// route (via free OSRM, see [NearbyHelpProvider.showRouteTo]) only draws
+  /// a line and shows distance/time, it doesn't narrate directions.
+  Future<void> _openExternalMaps(Place place) async {
     final uri = Uri.parse(
       'https://www.google.com/maps/dir/?api=1&destination='
       '${place.point.latitude},${place.point.longitude}',
@@ -65,7 +69,7 @@ class _NearbyHelpScreenState extends State<NearbyHelpScreen> {
     final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Couldn't open Google Maps.")),
+        const SnackBar(content: Text("Couldn't open an external maps app.")),
       );
     }
   }
@@ -101,6 +105,15 @@ class _NearbyHelpScreenState extends State<NearbyHelpScreen> {
                                 center: provider.location!,
                                 zoom: 14.5,
                                 controller: _mapController,
+                                polylines: provider.activeRoute == null
+                                    ? const []
+                                    : [
+                                        Polyline(
+                                          points: provider.activeRoute!.points,
+                                          color: AppColors.primary,
+                                          strokeWidth: 4,
+                                        ),
+                                      ],
                                 markers: [
                                   youAreHereMarker(provider.location!, size: 36),
                                   for (final p in visible)
@@ -114,6 +127,15 @@ class _NearbyHelpScreenState extends State<NearbyHelpScreen> {
                               ),
                       ),
                     ),
+                    if (provider.routeTarget != null)
+                      _RouteInfoBar(
+                        target: provider.routeTarget!,
+                        route: provider.activeRoute,
+                        loading: provider.isRouteLoading,
+                        failed: provider.routeFailed,
+                        onClear: provider.clearRoute,
+                        onOpenExternally: () => _openExternalMaps(provider.routeTarget!),
+                      ),
                     if (provider.locationStatus != null &&
                         provider.locationStatus != LocationAccessStatus.granted)
                       _LocationBanner(
@@ -207,7 +229,7 @@ class _NearbyHelpScreenState extends State<NearbyHelpScreen> {
                                   onTap: () => _focus(visible[i].point),
                                   onCall: () => _call(visible[i].phone),
                                   onDirections: () =>
-                                      _openDirections(visible[i]),
+                                      provider.showRouteTo(visible[i]),
                                 ),
                               ),
                             ),
@@ -218,6 +240,81 @@ class _NearbyHelpScreenState extends State<NearbyHelpScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _RouteInfoBar extends StatelessWidget {
+  const _RouteInfoBar({
+    required this.target,
+    required this.route,
+    required this.loading,
+    required this.failed,
+    required this.onClear,
+    required this.onOpenExternally,
+  });
+
+  final Place target;
+  final RouteOption? route;
+  final bool loading;
+  final bool failed;
+  final VoidCallback onClear;
+  final VoidCallback onOpenExternally;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.fieldFill,
+        borderRadius: BorderRadius.circular(AppRadius.r4),
+      ),
+      child: Row(
+        children: [
+          if (loading)
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+            )
+          else
+            Icon(
+              failed ? Icons.error_outline_rounded : Icons.alt_route_rounded,
+              size: 16,
+              color: failed ? AppColors.neutral400 : AppColors.primary,
+            ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              loading
+                  ? 'Getting directions to ${target.name}...'
+                  : failed
+                  ? "Couldn't get a route. Try Maps instead."
+                  : '${route!.distanceKm.toStringAsFixed(1)} km · ${route!.durationMin} min to ${target.name}',
+              style: AppTextStyles.b5,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          TextButton(
+            onPressed: onOpenExternally,
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text('Open in Maps', style: AppTextStyles.b5),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close_rounded, size: 16),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            tooltip: 'Clear route',
+            onPressed: onClear,
+          ),
+        ],
       ),
     );
   }
