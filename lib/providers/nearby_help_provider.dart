@@ -19,6 +19,7 @@ class NearbyHelpProvider extends ChangeNotifier {
   List<Place> _places = [];
   bool _isLoading = true;
   PlacesSource? _source;
+  String? _errorMessage;
   LocationAccessStatus? _locationStatus;
   String _filter = 'All';
   String _query = '';
@@ -33,6 +34,7 @@ class NearbyHelpProvider extends ChangeNotifier {
   LatLng? get location => _location;
   bool get isLoading => _isLoading;
   PlacesSource? get source => _source;
+  String? get errorMessage => _errorMessage;
   LocationAccessStatus? get locationStatus => _locationStatus;
   String get filter => _filter;
   String get query => _query;
@@ -75,6 +77,7 @@ class NearbyHelpProvider extends ChangeNotifier {
           : status;
       _places = [];
       _source = null;
+      _errorMessage = null;
       _isLoading = false;
       notifyListeners();
       return;
@@ -86,6 +89,7 @@ class NearbyHelpProvider extends ChangeNotifier {
     final result = await _repository.getNearby(location);
     _places = result.places;
     _source = result.source;
+    _errorMessage = result.errorMessage;
     _isLoading = false;
     notifyListeners();
   }

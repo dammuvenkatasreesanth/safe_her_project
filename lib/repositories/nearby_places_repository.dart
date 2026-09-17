@@ -7,9 +7,16 @@ import '../services/places_cache_service.dart';
 enum PlacesSource { live, cache, unavailable }
 
 class PlacesResult {
-  const PlacesResult({required this.places, required this.source});
+  const PlacesResult({required this.places, required this.source, this.errorMessage});
   final List<Place> places;
   final PlacesSource source;
+
+  /// The real reason the live fetch failed (e.g. "Overpass returned 502",
+  /// a timeout, "no internet") — only set when [source] is
+  /// [PlacesSource.unavailable] or [PlacesSource.cache]. Surfaced in the UI
+  /// instead of a generic message so a failure is actually diagnosable from
+  /// what the user sees, rather than everyone seeing the same "not working."
+  final String? errorMessage;
 }
 
 /// Single entry point Nearby Help uses to get places: tries a live
@@ -37,7 +44,8 @@ class NearbyPlacesRepository {
       places.sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
       await PlacesCacheService.save(places);
       return PlacesResult(places: places, source: PlacesSource.live);
-    } catch (_) {
+    } catch (e) {
+      final reason = e is OverpassException ? e.message : e.toString();
       final (cached, _) = await PlacesCacheService.load();
       if (cached.isNotEmpty) {
         final rescored = cached
@@ -48,9 +56,9 @@ class NearbyPlacesRepository {
             )
             .toList()
           ..sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
-        return PlacesResult(places: rescored, source: PlacesSource.cache);
+        return PlacesResult(places: rescored, source: PlacesSource.cache, errorMessage: reason);
       }
-      return const PlacesResult(places: [], source: PlacesSource.unavailable);
+      return PlacesResult(places: const [], source: PlacesSource.unavailable, errorMessage: reason);
     }
   }
 }

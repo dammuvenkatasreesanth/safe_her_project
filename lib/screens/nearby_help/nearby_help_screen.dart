@@ -147,7 +147,9 @@ class _NearbyHelpScreenState extends State<NearbyHelpScreen> {
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(
-                          'Showing recently saved nearby locations — may be out of date.',
+                          provider.errorMessage == null
+                              ? 'Showing recently saved nearby locations — may be out of date.'
+                              : 'Showing recently saved nearby locations (${provider.errorMessage}) — may be out of date.',
                           style: AppTextStyles.b5.copyWith(
                             color: AppColors.neutral400,
                           ),
@@ -207,6 +209,14 @@ class _NearbyHelpScreenState extends State<NearbyHelpScreen> {
                                       textAlign: TextAlign.center,
                                       style: AppTextStyles.b3,
                                     ),
+                                    if (provider.isUnavailable && provider.errorMessage != null) ...[
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        provider.errorMessage!,
+                                        textAlign: TextAlign.center,
+                                        style: AppTextStyles.b5.copyWith(color: AppColors.neutral400),
+                                      ),
+                                    ],
                                     if (provider.query.isEmpty &&
                                         (provider.location == null || provider.isUnavailable)) ...[
                                       const SizedBox(height: 10),
