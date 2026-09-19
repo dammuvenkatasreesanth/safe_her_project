@@ -96,7 +96,7 @@ vs. what you need to build.
 | # | Module | Screens (path under `lib/screens/`) | Status |
 |---|---|---|---|
 | 1 | **Auth & Profile** | `auth/signup_screen.dart`, `auth/login_screen.dart`, `auth/profile_setup_screen.dart`, `profile/edit_profile_screen.dart`, `profile/profile_tab.dart` | Real Firebase Auth (email/password) + Firestore `users/{uid}` doc, wired end to end including Profile tab/Edit Profile. Setup's "Add from Contacts" imports real device contacts (`flutter_contacts`) as emergency contacts. |
-| 2 | **Contacts & Nearby Services** | `contacts/contacts_screen.dart`, `contacts/contact_picker_screen.dart`, `nearby_help/nearby_help_screen.dart` | Contacts are Firestore-persisted (`users/{uid}/contacts`) with a 5-contact cap, plus "Import from Contacts" to pull from the device address book. Nearby Help calls the free Overpass API for real police/hospital/NGO pins (with a cached/static fallback), and its Call buttons open the dialer. |
+| 2 | **Contacts & Nearby Services** | `contacts/contacts_screen.dart`, `contacts/contact_picker_screen.dart`, `nearby_help/nearby_help_screen.dart` | Contacts are Firestore-persisted (`users/{uid}/contacts`) with a 5-contact cap, plus "Import from Contacts" to pull from the device address book. Nearby Help calls the free Overpass API for real police/hospital/NGO pins (falling back to the last cached fetch, or an honest "couldn't load" state with the real error and a Retry button; there is no made-up fallback list), and its Call buttons open the dialer. |
 | 3 | **SOS Trigger & Alerts** | `sos/sos_screen.dart` | Shake-to-trigger + hold-to-arm, real contact alerting (WhatsApp deep link, SMS fallback, and direct phone calls), real Police/Ambulance call buttons, and auto-recorded encrypted audio evidence on trigger (see Module 7). |
 | 4 | **Live GPS Tracking** | `tracking/live_tracking_tab.dart`, `tracking/start_journey_sheet.dart`, `tracking/pick_location_screen.dart` | Real GPS (`geolocator`), real destination search/pin (`Nominatim`) and real road routing (OSRM). Geofence "left the safe zone" and Auto Safe Arrival are both real, one-shot-per-session distance checks (`services/geofence_service.dart`). |
 | 5 | **Safe Route & Risk Zones** | `safe_route/safe_route_screen.dart`, `tracking/select_route_screen.dart` | Real scoring (`services/safety_score_service.dart`) — live OSM police-station + street-lamp density near each zone/route, discounted at night. Zone *positions* are still a fixed offset pattern around the user (no free source for real neighborhood boundaries exists). |
@@ -110,7 +110,7 @@ vs. what you need to build.
 No paid API keys are used anywhere in the app:
 
 - **Maps** — OpenStreetMap tiles via `flutter_map` (`lib/widgets/app_map.dart`)
-- **Device location** — `geolocator` (`lib/services/location_service.dart`), falls back to a Dhanmondi, Dhaka coordinate if permission is denied
+- **Device location** — `geolocator` (`lib/services/location_service.dart`), returns `null` if permission is denied or no GPS fix arrives, and every screen shows an honest "couldn't get your location" state with Retry (it used to silently fall back to a hardcoded Dhaka coordinate, which showed wrong-city results)
 - **Destination search / reverse geocoding** — OSM Nominatim, no key (`lib/services/geocoding_service.dart`) — please respect Nominatim's 1 req/sec usage policy; don't hammer it in a loop
 - **Nearby police/hospital/NGO data** — OSM Overpass API (`lib/screens/nearby_help/nearby_help_screen.dart`)
 
