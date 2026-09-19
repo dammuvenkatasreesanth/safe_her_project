@@ -103,7 +103,7 @@ vs. what you need to build.
 | 6 | **AI Behavior Detection** | `behavior/behavior_monitor_screen.dart` | Real accelerometer-based classification (`services/motion_classifier.dart`) — running, sudden-stop, and free-fall-then-impact (possible fall) patterns from live sensor data, unit-tested. No cloud/ML model, just magnitude thresholds. |
 | 7 | **Evidence Recording & Storage** | `evidence/evidence_screen.dart`, `evidence/evidence_viewer_screen.dart` | Real audio/photo/video capture, AES-256-GCM encrypted at rest (`services/encryption_service.dart`, key in the OS keystore) — plaintext never touches disk outside a transient view session. Viewing any entry requires the device's biometric/PIN lock (`services/biometric_service.dart`). Local-only by design — no Firebase Storage (would require the paid Blaze plan). |
 | 8 | **Fake Call & AI Chatbot** | `fake_call/fake_call_screen.dart`, `fake_call/incoming_call_screen.dart`, `chatbot/chatbot_screen.dart` | Both fully functional as local features (no backend needed). Chatbot is rule-based (`_knowledgeBase` in `chatbot_screen.dart`) — extend the keyword map or swap in a real NLP service. |
-| 9 | **Incident Reporting, Timeline & Admin Dashboard** | `report/report_screen.dart`, `history/history_tab.dart` | Both real and Firestore-backed via `services/incident_service.dart` (reports, SOS alerts, and geofence/arrival safety events all land in the same `incidents` collection History reads from). **Admin web dashboard is not part of this Flutter app** — per the original plan it's a separate web project (Flutter Web/React) reading the same Firestore `incidents` collection; start that as its own app. |
+| 9 | **Incident Reporting, Timeline & Admin Dashboard** | `report/report_screen.dart`, `history/history_tab.dart` | Both real and Firestore-backed via `services/incident_service.dart` (reports, SOS alerts, and geofence/arrival safety events all land in the same `incidents` collection History reads from). **The web Admin Dashboard is a separate Flutter Web app** on the `admin-dashboard` branch of this repo (see [Admin Dashboard](#admin-dashboard) below) — it reads the same Firestore `incidents`, `users` and `live_sessions` collections. |
 
 ## Free services already wired up
 
@@ -125,7 +125,7 @@ wiring real persistence, so modules don't collide:
 
 - `users` — profile, medical info (Module 1)
 - `contacts` — subcollection under `users` (Module 2)
-- `incidents` — SOS alerts + reports, used by History and the future Admin Dashboard (Modules 3, 9)
+- `incidents` — SOS alerts + reports, used by History and the Admin Dashboard (Modules 3, 9)
 - `recordings` — evidence metadata (Module 7)
 
 ## Design system
@@ -151,3 +151,27 @@ Ping the team lead (repo owner) if you're blocked on which module owns a
 piece of shared code, or want to change something in `lib/widgets/` or
 `lib/theme/` that other modules depend on — those are shared, so changes
 there affect everyone's screens.
+
+---
+
+## Admin Dashboard
+
+A separate Flutter Web app for administrators lives on the
+**`admin-dashboard`** branch of this repository (its own project, with its
+own README covering every feature, the security model and troubleshooting).
+
+- **What it shows:** all SOS alerts, incident reports and automatic safety
+  events across every user, a user list, active live-tracking sessions, and
+  summary charts, updating in real time.
+- **How it connects:** it reads this app's Firestore project directly. It has
+  no backend of its own. Access is limited to accounts listed in an `admins`
+  collection, enforced by the `isAdmin()` rule in this repo's `firestore.rules`.
+- **To run it:**
+  ```bash
+  git checkout admin-dashboard
+  flutter pub get
+  flutter run -d chrome
+  ```
+  It needs three one-time setup steps first (register a Web app on the
+  Firebase project, publish this repo's updated `firestore.rules`, and add
+  yourself to the `admins` collection). See the README on that branch.
